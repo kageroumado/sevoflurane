@@ -19,6 +19,8 @@ final class GPTkDownload: NSObject {
         let id: Int
         let filename: String
         var fraction: Double
+        /// Where Apple serves it from, for a download that can be started again.
+        var source: URL?
         var phase: Phase
 
         enum Phase: Equatable {
@@ -67,8 +69,9 @@ final class GPTkDownload: NSObject {
     /// Installs a downloaded DMG and answers a failure string, or `nil` on
     /// success.
     private let install: @MainActor (URL, D3DMetalInstaller.Origin) async -> String?
-    /// Called with each version as it finishes installing.
-    var onInstalled: (@MainActor (String) -> Void)?
+    /// Called whenever a download starts, installs or fails, so its owner
+    /// can follow it without a view on screen.
+    var onChange: (@MainActor () -> Void)?
 
     init(
         install: @escaping @MainActor (URL, D3DMetalInstaller.Origin) async -> String?,
@@ -121,7 +124,39 @@ final class GPTkDownload: NSObject {
         nextID += 1
         let id = nextID
         items.append(Item(id: id, filename: filename, fraction: 1, phase: .installing))
+        onChange?()
         Task { await finishInstall(id: id, from: url, origin: found ? .foundInFolder : .chosen) }
+    }
+
+    /// The versions whose download or install failed, as Apple names them.
+    var failedItems: [Item] {
+        items.filter(\.phase.isFailure)
+    }
+
+    /// How far the downloads under way are, taken together; `nil` when
+    /// nothing is downloading.
+    var downloadFraction: Double? {
+        let downloading = items.filter { $0.phase == .downloading }
+        guard !downloading.isEmpty else { return nil }
+        return downloading.reduce(0) { $0 + $1.fraction } / Double(downloading.count)
+    }
+
+    /// Starts each failed download again from Apple's address for it.
+    func retryFailed() {
+        let failed = failedItems
+        items.removeAll(where: \.phase.isFailure)
+        for item in failed {
+            guard let source = item.source else { continue }
+            startedDownloads.remove(source.absoluteString)
+            #if DEBUG
+                if isStaged { continue }
+            #endif
+            startedDownloads.insert(source.absoluteString)
+            webView.startDownload(using: URLRequest(url: source)) { [weak self] download in
+                download.delegate = self
+            }
+        }
+        onChange?()
     }
 
     var isBusy: Bool {
@@ -533,7 +568,8 @@ extension GPTkDownload: WKDownloadDelegate {
         let key = ObjectIdentifier(download)
         destinations[key] = destination
         itemIDs[key] = id
-        items.append(Item(id: id, filename: suggestedFilename, fraction: 0, phase: .downloading))
+        items.append(Item(id: id, filename: suggestedFilename, fraction: 0, source: url, phase: .downloading))
+        onChange?()
         observations[key] = download.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
             let fraction = progress.fractionCompleted
             Task { @MainActor in self?.updateFraction(id: id, fraction: fraction) }
@@ -558,7 +594,6 @@ extension GPTkDownload: WKDownloadDelegate {
             updatePhase(id: id, .failed(failure))
         } else if let version = Self.version(inFilename: source.lastPathComponent) {
             updatePhase(id: id, .installed(version: version))
-            onInstalled?(version)
         } else {
             updatePhase(id: id, .installed(version: source.lastPathComponent))
         }
@@ -582,6 +617,7 @@ extension GPTkDownload: WKDownloadDelegate {
     }
 
     private func updatePhase(id: Int, _ phase: Item.Phase) {
+        defer { onChange?() }
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].phase = phase
     }

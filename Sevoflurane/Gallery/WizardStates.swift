@@ -8,13 +8,15 @@
     /// assistant's own buttons against a simulated machine that stops in, or
     /// fails, the action named, so the screen shows what the provisioner
     /// leaves and follows it when that changes. Only a state a simulated
-    /// machine cannot reach (Steam being closed, Apple's page, what Steam's
-    /// windows are doing) is staged by hand.
+    /// machine cannot reach (Apple's page, what Steam's windows are doing) is
+    /// staged by hand.
     @MainActor
     final class WizardState: Identifiable {
         /// `<screen number>-<screen>-<state>`; the export writes `setup-<id>.png`.
         let id: String
         let store: SetupStore
+        /// How tall the window is in this state, once a view has measured it.
+        let layout = SetupLayout()
         private let walk: (@MainActor (SetupStore) async -> Void)?
         private var hasWalked = false
 
@@ -30,12 +32,6 @@
             hasWalked = true
             await walk?(store)
         }
-
-        /// The window's height in this state: the tall one while the screen
-        /// hosts Apple's page.
-        var height: CGFloat {
-            store.wantsTallWindow ? SetupMetrics.tallWindowHeight : SetupMetrics.windowSize.height
-        }
     }
 
     extension WizardState {
@@ -48,6 +44,10 @@
         private static let plainMac = SetupDetection(
             rosetta: true, crossover: nil, bottles: [], managedEngineVersions: [],
         )
+
+        /// The room between the menu bar and the Dock on a 13-inch MacBook
+        /// at its default scaling, less the window's margin.
+        private static let smallDisplayLimit: CGFloat = 800
 
         private static func day(_ year: Int, _ month: Int, _ day: Int) -> Date? {
             Calendar(identifier: .gregorian).date(from: DateComponents(year: year, month: month, day: day))
@@ -62,12 +62,12 @@
 
         /// A store on a simulated machine. `asks` are the questions the
         /// progress screen still has open: a state about something else
-        /// answers them beforehand.
+        /// answers them beforehand. `stop` is how closing a running Steam
+        /// goes on a machine that has one.
         private static func make(
             _ id: String, on scenario: SetupScenario = .freshMachine, machine detection: SetupDetection? = plainMac,
-            asks: Set<SetupCard> = [],
-            activity: Provisioner.Activity = .idle, stage: SetupStage? = nil, failure: SetupFailure? = nil,
-            steamWindow: SetupSteamWindow = .library,
+            asks: Set<SetupCard> = [], steamWindow: SetupSteamWindow = .library,
+            stop: (@MainActor (_ narrate: (String) -> Void) async -> String?)? = nil,
             environment configure: (DryRunSetupEnvironment) -> Void = { _ in },
             walk: (@MainActor (SetupStore) async -> Void)? = nil,
         ) -> WizardState {
@@ -77,10 +77,10 @@
             environment.crossOverAppearsOnRecheck = false
             environment.factsByBottle = libraries
             environment.sharesRunStats = asks.contains(.sharing) ? nil : false
+            environment.simulatesRunningSteam = stop != nil
             configure(environment)
             let provisioner = Provisioner(
-                previewActivity: activity, detection: detection ?? scenario.fixture, environment: environment,
-                stage: stage, failure: failure,
+                previewActivity: .idle, detection: detection ?? scenario.fixture, environment: environment,
             )
             provisioner.installsEveryDependency = true
             let graphics = GraphicsStore(environment: DemoGraphicsEnvironment(
@@ -88,6 +88,10 @@
             ))
             var actions = SetupStore.Actions()
             actions.steamWindow = { steamWindow }
+            if let stop {
+                actions.steamIsRunning = { true }
+                actions.stopClient = stop
+            }
             let store = SetupStore(provisioner: provisioner, graphics: graphics, actions: actions)
             return WizardState(id: id, store: store, walk: walk)
         }
@@ -97,6 +101,41 @@
         private static func begin(_ store: SetupStore) async {
             await store.prepare()
             store.begin()
+        }
+
+        /// Waits for `condition`, which a run reaches a few main-actor turns
+        /// after the button that starts it.
+        private static func wait(for condition: () -> Bool) async {
+            for _ in 0 ..< 400 where !condition() {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+
+        /// On the machine with several Steams, picks the one this
+        /// installation does not drive yet, which a running Steam has to be
+        /// closed for.
+        private static func pickAnotherSteam(_ store: SetupStore) async {
+            await begin(store)
+            store.steamChoice = store.candidates.first { $0.bottle.name == "Games" }?.id
+            store.answerQuestion()
+        }
+
+        /// A year: longer than any gallery stays open.
+        private static let forever = Duration.seconds(365 * 86400)
+
+        // How closing a running Steam goes on a simulated machine.
+
+        private static func closesAtOnce(_: (String) -> Void) async -> String? {
+            nil
+        }
+
+        private static func neverCloses(_: (String) -> Void) async -> String? {
+            try? await Task.sleep(for: forever)
+            return nil
+        }
+
+        private static func refusesToClose(_: (String) -> Void) async -> String? {
+            String(localized: "Quit Steam yourself, then try again.")
         }
 
         // MARK: - The welcome and the questions
@@ -113,6 +152,7 @@
                 await begin(store)
                 store.engineChoice = .crossover
             }),
+            make("3-close-steam", on: .multipleBottles, machine: nil, stop: closesAtOnce, walk: pickAnotherSteam),
         ]
 
         // MARK: - The work
@@ -137,9 +177,15 @@
 
         private static let progressStates: [WizardState] = [
             progress("4-progress-early") { $0.hold = .engineDownload(fraction: 0.42) },
+            make("4-progress-time-left", environment: { $0.hold = .engineDownload(fraction: 0.42) }, walk: { store in
+                await begin(store)
+                await wait { store.provisioner.stageFraction != nil }
+                // A simulated download has no rate to estimate from.
+                store.provisioner.stage(secondsLeft: 240)
+            }),
             progress("4-progress-details", details: true) { $0.hold = .clientUpdate },
             progress("4-progress-late") { $0.hold = .dependency },
-            progress("4-progress-sharing", asks: [.sharing, .toolkit]) { $0.hold = .engineDownload(fraction: 0.42) },
+            progress("4-progress-sharing", asks: [.sharing]) { $0.hold = .engineDownload(fraction: 0.42) },
             make("4-progress-rosetta", machine: nil, environment: { $0.hold = .rosetta }, walk: { store in
                 store.showsDetails = true
                 await begin(store)
@@ -155,61 +201,71 @@
                 await begin(store)
                 store.answerQuestion()
             }),
-            // A simulated machine has no Steam to close, so the two states of
-            // the stop before a move to another Steam are staged as the
-            // provisioner leaves them.
             make(
                 "4-progress-closing-steam", on: .multipleBottles, machine: nil,
-                activity: .working(InterfaceCopy.localized("Stopping Steam…")), stage: .steamStop,
-                walk: { $0.stage(screen: .progress, showsDetails: true) },
+                stop: neverCloses,
+                walk: { store in
+                    store.showsDetails = true
+                    await pickAnotherSteam(store)
+                    store.answerQuestion()
+                },
             ),
             make(
                 "4-progress-closing-steam-failed", on: .multipleBottles, machine: nil,
-                activity: .failed(String(localized: "It did not answer. Try again.")), stage: .steamStop,
-                failure: SetupFailure(stage: .steamStop, cause: String(localized: "It did not answer. Try again."), advice: nil),
-                walk: { $0.stage(screen: .progress) },
+                stop: refusesToClose,
+                walk: { store in
+                    await pickAnotherSteam(store)
+                    store.answerQuestion()
+                },
             ),
         ]
 
         // MARK: - The DirectX 12 offer
 
+        private static let toolkitFiles = [
+            "Evaluation_environment_for_Windows_games_4.0.dmg",
+            "Evaluation_environment_for_Windows_games_4.0_beta_2.dmg",
+        ]
+
+        /// The offer with Steam's own download held. `route` opens Apple's
+        /// page or the browser's way; `items` are downloads already begun,
+        /// which fold the offer into its status row.
         private static func toolkit(
-            _ id: String, route: GPTkDownload.Route? = .here, phase: GPTkDownload.AutoPhase = .idle,
-            items: [GPTkDownload.Item.Phase] = [], manualCandidate: String? = nil,
+            _ id: String, asks: Set<SetupCard> = [.toolkit], route: GPTkDownload.Route? = nil,
+            phase: GPTkDownload.AutoPhase = .idle, items: [GPTkDownload.Item.Phase] = [],
+            manualCandidate: String? = nil, heightLimit: CGFloat? = nil,
         ) -> WizardState {
-            let state = make(id, asks: [.toolkit], environment: { $0.hold = .clientUpdate }, walk: { store in
+            let state = make(id, asks: asks, environment: { $0.hold = .clientUpdate }, walk: { store in
                 await begin(store)
                 guard let route else { return }
                 if route == .here { store.openToolkitPage() } else { store.useBrowserForToolkit() }
             })
-            let files = [
-                "Evaluation_environment_for_Windows_games_4.0.dmg",
-                "Evaluation_environment_for_Windows_games_4.0_beta_2.dmg",
-            ]
+            if let heightLimit { state.layout.heightLimit = heightLimit }
             state.store.toolkit.stage(
                 route: route ?? .here, autoPhase: phase,
-                items: zip(files, items).enumerated().map { index, pair in
+                items: zip(toolkitFiles, items).enumerated().map { index, pair in
                     GPTkDownload.Item(id: index, filename: pair.0, fraction: index == 0 ? 0.64 : 0.21, phase: pair.1)
                 },
-                pickedVersions: phase == .downloading ? ["4.0", "4.0 beta 2"] : [],
+                pickedVersions: items.isEmpty ? [] : ["4.0", "4.0 beta 2"],
                 manualCandidate: manualCandidate,
             )
             return state
         }
 
         private static let toolkitStates: [WizardState] = [
-            toolkit("4-progress-toolkit", route: nil),
-            toolkit("4-progress-toolkit-sign-in"),
-            toolkit("4-progress-toolkit-downloading", phase: .downloading, items: [.downloading, .downloading]),
+            toolkit("4-progress-toolkit"),
+            toolkit("4-progress-toolkit-sign-in", route: .here),
+            toolkit("4-progress-toolkit-sign-in-13-inch", route: .here, heightLimit: smallDisplayLimit),
             toolkit(
-                "4-progress-toolkit-failed", phase: .downloading,
-                items: [.installed(version: "4.0"), .failed("The network connection was lost.")],
-            ),
-            toolkit(
-                "4-progress-toolkit-manual", phase: .manual,
+                "4-progress-toolkit-manual", route: .here, phase: .manual,
                 manualCandidate: "Evaluation environment for Windows games 4.0 beta 2",
             ),
-            toolkit("4-progress-toolkit-browser", route: .browser, items: [.installing]),
+            toolkit("4-progress-toolkit-browser", route: .browser),
+            toolkit("4-progress-toolkit-running", asks: [.toolkit, .sharing], items: [.downloading, .downloading]),
+            toolkit(
+                "4-progress-toolkit-failed",
+                items: [.installed(version: "4.0"), .failed("The network connection was lost.")],
+            ),
         ]
 
         // MARK: - The last screen
@@ -221,10 +277,7 @@
         ) -> WizardState {
             make(id, steamWindow: steamWindow, walk: { store in
                 await begin(store)
-                // The pass ends a few turns after its button; the screen follows it.
-                for _ in 0 ..< 400 where store.screen != .done {
-                    try? await Task.sleep(for: .milliseconds(5))
-                }
+                await wait { store.screen == .done }
                 if let repair { store.stage(screen: .done, helperRepair: repair) }
             })
         }
@@ -238,7 +291,7 @@
                 "5-done-helper-needs-approval", .helperDown,
                 repair: .needsApproval("Approve Sevoflurane's background helper in Login Items."),
             ),
-            done("5-done-steam-gave-up", .gaveUp("the client keeps crashing on start")),
+            done("5-done-steam-gave-up", .gaveUp),
         ]
 
         // MARK: - The popover that leads back
@@ -250,6 +303,7 @@
             ("working", progress("popover-working") { $0.hold = .engineDownload(fraction: 0.42) }),
             ("failed", progress("popover-failed") { $0.installerDownloadFailure = offline }),
             ("installed", progress("popover-installed", asks: [.sharing])),
+            ("ready", done("popover-ready", .signIn)),
         ]
     }
 #endif

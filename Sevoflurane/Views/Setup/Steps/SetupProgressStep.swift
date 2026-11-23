@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The work: one bar for the whole pass with the stage it is in, the stages
 /// behind a disclosure, and under them the question being asked while it
-/// runs. The buttons at the bottom belong to that question.
+/// runs. The buttons at the bottom belong to that question, or to a pass
+/// that stopped.
 struct SetupProgressStep: View {
     let store: SetupStore
 
@@ -13,7 +14,13 @@ struct SetupProgressStep: View {
         let card = store.hasFailed ? nil : store.card
         SetupScreenLayout(hasButtons: card != nil || store.hasFailed) {
             SetupPage(title: title, subtitle: subtitle) {
-                SetupPassSummary(store: store)
+                // Once Steam is in, the screen is the question's alone.
+                if !store.workIsDone {
+                    SetupPassSummary(store: store)
+                }
+                if !store.toolkit.items.isEmpty, store.toolkit.failedItems.isEmpty {
+                    SetupToolkitStatus(download: store.toolkit)
+                }
                 switch card {
                 case .sharing: SetupSharingCard()
                 case .toolkit: SetupToolkitCard(store: store)
@@ -22,24 +29,18 @@ struct SetupProgressStep: View {
             }
         } secondary: {
             switch card {
-            case .sharing:
-                Button("Don\u{2019}t Share") { store.answerSharing(false) }
-            case .toolkit:
-                Button("Not Now") { store.declineToolkit() }
-            case nil:
-                if store.offersEngineFile {
-                    Button("Use a Downloaded File…") {
-                        if let file = EngineFilePanel.choose() { store.tryAgain(withEngineFile: file) }
-                    }
-                    .help("Installs from a dormison-r<N>.tar.xz you downloaded from the Dormison releases, with its .sig beside it.")
-                }
+            case .sharing: Button("Don\u{2019}t Share") { store.answerSharing(false) }
+            case .toolkit: Button("Not Now") { store.declineToolkit() }
+            case nil: EmptyView()
             }
         } primary: {
             switch card {
             case .sharing:
                 Button("Share") { store.answerSharing(true) }
             case .toolkit:
-                if !store.toolkitIsOpen {
+                if !store.toolkit.failedItems.isEmpty {
+                    Button("Try Again") { store.retryToolkit() }
+                } else if !store.toolkitIsOpen {
                     Button("Sign In to Apple") { store.openToolkitPage() }
                 }
             case nil:
@@ -51,20 +52,21 @@ struct SetupProgressStep: View {
     }
 
     private var title: LocalizedStringResource {
+        if store.hasFailed { return "Setup stopped" }
         if store.workIsDone { return "Steam is installed" }
         return store.isAdopting ? "Getting Steam ready" : "Setting up Steam"
     }
 
     private var subtitle: LocalizedStringResource? {
-        if store.workIsDone { return "One thing before it opens." }
-        if store.hasFailed { return "Try Again takes up where it stopped." }
+        if store.hasFailed { return nil }
+        if store.workIsDone { return "One question before it opens." }
         return "You can close this window. Setup continues in the menu bar."
     }
 }
 
 /// How far the pass is: the stage under way in words, one bar across every
-/// stage, the amount where the app knows one, and a failure where it stopped
-/// with the way to try again.
+/// stage with its fraction in digits, the time a download of known size
+/// still takes, and a failure where it stopped.
 struct SetupPassSummary: View {
     let store: SetupStore
 
@@ -73,6 +75,7 @@ struct SetupPassSummary: View {
     }
 
     var body: some View {
+        @Bindable var store = store
         SetupList {
             VStack(alignment: .leading, spacing: SettingsMetrics.captionGap) {
                 HStack(alignment: .firstTextBaseline) {
@@ -85,24 +88,13 @@ struct SetupPassSummary: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                ProgressView(value: store.workIsDone ? 1 : provisioner.passFraction)
+                ProgressView(value: provisioner.passFraction)
                     .accessibilityLabel(Text(status))
             }
-            if let failure = provisioner.failure, !failure.text.isEmpty {
-                SettingsNotice(.failure, failure.text)
+            if let failure = provisioner.failure {
+                SetupFailureNote(store: store, failure: failure)
             }
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { store.showsDetails.toggle() }
-            } label: {
-                SettingsRow(title: store.showsDetails ? "Hide details" : "Show details") {} accessory: {
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(store.showsDetails ? 90 : 0))
-                        .foregroundStyle(.primary)
-                        .accessibilityHidden(true)
-                }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
+            SetupDisclosureRow(title: store.showsDetails ? "Hide details" : "Show details", isOpen: $store.showsDetails)
             if store.showsDetails {
                 ForEach(provisioner.reports) { report in
                     SetupStageRow(report: report, fraction: provisioner.stageFraction)
@@ -114,7 +106,6 @@ struct SetupPassSummary: View {
     /// The stage under way, or what the pass came to. A download whose
     /// total is Steam's to know says how much has arrived.
     private var status: String {
-        if store.workIsDone { return String(localized: "Steam is installed.") }
         if let failure = provisioner.failure {
             return failure.stage?.failedSentence ?? String(localized: "Setup stopped.")
         }
@@ -126,10 +117,78 @@ struct SetupPassSummary: View {
         return String(localized: "\(working) \(bytes.formatted(.byteCount(style: .file))) received")
     }
 
-    /// How far the whole pass is, in digits: the number the bar draws.
+    /// How far the whole pass is, in digits: the number the bar draws. A
+    /// download of known size adds the time it still takes.
     private var amount: String? {
         guard provisioner.isWorking else { return nil }
-        return provisioner.passFraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero))
+        let percent = provisioner.passFraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero))
+        guard let seconds = provisioner.stageSecondsLeft else { return percent }
+        return "\(percent) · \(Self.timeLeft(seconds))"
+    }
+
+    /// "about 4 minutes left", in whole minutes; under one, "less than a minute left".
+    static func timeLeft(_ seconds: Int) -> String {
+        let minutes = Int((Double(seconds) / 60).rounded())
+        guard minutes >= 1 else { return String(localized: "less than a minute left") }
+        return minutes == 1 ? String(localized: "about 1 minute left") : String(localized: "about \(minutes) minutes left")
+    }
+}
+
+/// Why a pass stopped, under the sentence that names the stage: the cause
+/// with the failure's mark, then what a second try does, in plain type.
+private struct SetupFailureNote: View {
+    let store: SetupStore
+    let failure: SetupFailure
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SettingsMetrics.captionGap) {
+            if !failure.cause.isEmpty {
+                SettingsStatus(.failure, failure.cause)
+            }
+            if let advice = failure.advice {
+                Text(advice)
+                    .font(SettingsType.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if store.offersEngineFile {
+                Button("Downloaded it on another Mac? Choose the File…") {
+                    if let file = EngineFilePanel.choose() { store.tryAgain(withEngineFile: file) }
+                }
+                .buttonStyle(.link)
+                .font(SettingsType.caption)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The toolkit's downloads once they run: one row that says how far they
+/// are, while the screen goes on to its next question.
+struct SetupToolkitStatus: View {
+    let download: GPTkDownload
+
+    var body: some View {
+        SetupList {
+            SettingsRow(
+                title: "Game Porting Toolkit",
+                caption: download.items.count > 1 ? String(localized: "Two versions. Some games need the newer one.") : "",
+            ) {
+                Text(state)
+                    .font(SettingsType.value)
+                    .foregroundStyle(.secondary)
+            } accessory: {
+                if !download.isBusy { SettingsStateMark(kind: .done) }
+            }
+        }
+    }
+
+    private var state: String {
+        if let fraction = download.downloadFraction {
+            let percent = fraction.formatted(.percent.precision(.fractionLength(0)).rounded(rule: .towardZero))
+            return String(localized: "downloading, \(percent)")
+        }
+        return download.isBusy ? String(localized: "installing") : String(localized: "installed")
     }
 }
 
@@ -190,7 +249,7 @@ extension SetupStage {
     /// The stage while it is under way.
     var workingSentence: String {
         switch self {
-        case .steamStop: String(localized: "Closing the Steam that is running…")
+        case .steamStop: String(localized: "Closing Steam…")
         case .rosetta: String(localized: "Installing Apple\u{2019}s Rosetta…")
         case .engine: String(localized: "Downloading Windows support…")
         case .bottle: String(localized: "Preparing Steam\u{2019}s folder…")
@@ -203,11 +262,11 @@ extension SetupStage {
     /// The stage as the one that failed.
     var failedSentence: String {
         switch self {
-        case .steamStop: String(localized: "The Steam that is running could not be closed.")
+        case .steamStop: String(localized: "Steam is still running and did not quit.")
         case .rosetta: String(localized: "Apple\u{2019}s Rosetta could not be installed.")
         case .engine: String(localized: "Windows support could not be downloaded.")
         case .bottle: String(localized: "Steam\u{2019}s folder could not be prepared.")
-        case .installer: String(localized: "Steam\u{2019}s installer did not finish.")
+        case .installer: String(localized: "Steam\u{2019}s installer stopped before it finished.")
         case .client: String(localized: "Steam could not be downloaded.")
         case .dependencies: String(localized: "Fonts and extras could not be installed.")
         }

@@ -8,84 +8,107 @@ struct SetupDoneStep: View {
     let store: SetupStore
 
     var body: some View {
+        @Bindable var store = store
         let window = store.steamWindow
-        SetupScreenLayout {
-            SetupHero(title: title(for: window), caption: caption(for: window)) {
-                Image(systemName: isReady(window) ? "checkmark.circle.fill" : symbol(for: window))
-                    .font(.system(size: 88))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isReady(window) ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
-                    .accessibilityHidden(true)
+        let state = Standing(window: window, repair: store.helperRepair)
+        // Steam on its way has nothing to press: the screen turns by itself.
+        SetupScreenLayout(hasButtons: state != .starting) {
+            SetupHero(title: state.title, caption: Text(state.caption)) {
+                picture(for: state)
             } content: {
                 VStack(spacing: Theme.Space.lg) {
-                    if let repair = store.helperRepair, window == .helperDown {
-                        SettingsStatus(repair.isFailure ? .failure : .done, repair.sentence)
+                    if state == .helperDown, let repair = store.helperRepair, repair.isFailure {
+                        SettingsStatus(.failure, repair.sentence)
                     }
                     // Where the app lives and whether it opens by itself
                     // matter once Steam is on its way, not while it cannot start.
-                    if isReady(window) || window == .starting {
+                    if state == .ready || state == .signIn || state == .starting {
                         Text("Sevoflurane stays in the menu bar: \(Text(Image(nsImage: MenuBarIcon.image(badged: false))).baselineOffset(Self.glyphDrop))")
-                        Toggle("Open Sevoflurane at login", isOn: Binding(
-                            get: { store.opensAtLogin },
-                            set: { store.setOpensAtLogin($0) },
-                        ))
-                        .toggleStyle(.checkbox)
+                        Toggle("Open Sevoflurane at login", isOn: $store.opensAtLogin)
+                            .toggleStyle(.checkbox)
                     }
                 }
             }
         } secondary: {
-            switch window {
-            case .signIn:
-                Button("Skip Sign-In") { store.skipSignIn() }
+            if state == .signIn {
+                Button("Not Now") { store.skipSignIn() }
                     .help("Run Windows programs from Quick Launch. You can sign in to Steam later from the menu bar.")
-            case .helperDown:
-                Button("Open Login Items") { store.openLoginItems() }
-            case .starting, .gaveUp, .library:
-                EmptyView()
             }
         } primary: {
-            switch window {
-            case .signIn, .library:
-                Button("Open Steam") { store.finish() }
-            case .starting:
-                Button("Open Steam") {}
-                    .disabled(true)
-            case .helperDown:
-                Button("Repair Helper") { store.repairHelper() }
-                    .disabled(store.isRepairingHelper)
-            case .gaveUp:
-                Button("Start Steam Again") { store.restartSteam() }
+            switch state {
+            case .ready, .signIn: Button("Open Steam") { store.finish() }
+            case .starting: EmptyView()
+            case .helperDown: Button("Fix It") { store.repairHelper() }.disabled(store.isRepairingHelper)
+            case .helperNeedsApproval: Button("Open Login Items") { store.openLoginItems() }
+            case .gaveUp: Button("Start Steam Again") { store.restartSteam() }
             }
         }
     }
 
     /// Sets the menu-bar glyph, taller than the text's capitals, on the line.
     private static let glyphDrop: CGFloat = -4
+    private static let pictureSize: CGFloat = 88
 
-    private func isReady(_ window: SetupSteamWindow) -> Bool {
-        window == .signIn || window == .library
-    }
-
-    private func symbol(for window: SetupSteamWindow) -> String {
-        window == .starting ? "hourglass.circle.fill" : "exclamationmark.triangle.fill"
-    }
-
-    private func title(for window: SetupSteamWindow) -> LocalizedStringResource {
-        switch window {
-        case .signIn, .library: "Steam is ready"
-        case .starting: "Steam is starting"
-        case .helperDown: "Steam cannot start yet"
-        case .gaveUp: "Steam did not start"
+    @ViewBuilder
+    private func picture(for state: Standing) -> some View {
+        switch state {
+        case .ready, .signIn:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: Self.pictureSize))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.green)
+                .accessibilityHidden(true)
+        case .starting:
+            ProgressView()
+                .controlSize(.extraLarge)
+        case .helperDown, .helperNeedsApproval, .gaveUp:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: Self.pictureSize))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 
-    private func caption(for window: SetupSteamWindow) -> Text {
-        switch window {
-        case .signIn: Text("Sign in to see your games.")
-        case .library: Text("Your games are in its library.")
-        case .starting: Text("Its first start can take a minute.")
-        case .helperDown: Text("Sevoflurane\u{2019}s background helper starts Steam, and it is not running.")
-        case let .gaveUp(reason): Text(SetupFailureText.asSentence(reason))
+    /// What the screen says: Steam's windows, and for a helper that is
+    /// down, whether macOS is waiting for an approval.
+    private enum Standing {
+        case ready
+        case signIn
+        case starting
+        case helperDown
+        case helperNeedsApproval
+        case gaveUp
+
+        init(window: SetupSteamWindow, repair: DaemonService.RepairResult?) {
+            switch window {
+            case .library: self = .ready
+            case .signIn: self = .signIn
+            case .starting: self = .starting
+            case .gaveUp: self = .gaveUp
+            case .helperDown:
+                if case .needsApproval = repair { self = .helperNeedsApproval } else { self = .helperDown }
+            }
+        }
+
+        var title: LocalizedStringResource {
+            switch self {
+            case .ready, .signIn: "Steam is ready"
+            case .starting: "Steam is starting"
+            case .helperDown, .helperNeedsApproval: "Steam cannot start yet"
+            case .gaveUp: "Steam did not start"
+            }
+        }
+
+        var caption: LocalizedStringResource {
+            switch self {
+            case .signIn: "Sign in to see your games."
+            case .ready: "Your games are in its library."
+            case .starting: "Its first start can take a minute."
+            case .helperDown: "A part of Sevoflurane that starts Steam is not running."
+            case .helperNeedsApproval: "Turn on Sevoflurane under \u{201C}Allow in the Background\u{201D}, then come back."
+            case .gaveUp: "Steam closed right after starting."
+            }
         }
     }
 }

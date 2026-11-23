@@ -4,12 +4,12 @@ import SwiftUI
 /// The DirectX 12 offer, asked while Steam installs: what the player gets,
 /// what it is, why Apple asks for a sign-in. "Sign In to Apple" brings up
 /// Apple's own page with its host over it; the player's browser is the other
-/// way. Declining is the screen's "Not Now".
+/// way. Once a download runs, the card gives way to one status row
+/// (``SetupToolkitStatus``); a download that failed brings it back with the
+/// reason. Declining is the screen's "Not Now".
 struct SetupToolkitCard: View {
     let store: SetupStore
-
-    /// The first run's one name for what Apple's page gives.
-    private static let product = "Game Porting Toolkit"
+    @Environment(SetupLayout.self) private var layout
 
     private var download: GPTkDownload {
         store.toolkit
@@ -20,10 +20,12 @@ struct SetupToolkitCard: View {
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
                 Text("Newer games (DirectX 12)")
                     .font(SettingsType.heading)
-                // The offer is read before Apple's page is asked for; with
-                // the page up, the room is the page's.
-                if !store.toolkitIsOpen {
-                    Text("They need Apple\u{2019}s Game Porting Toolkit, a free download from Apple. Apple asks you to sign in with an Apple Account to download it. The sign-in page is Apple\u{2019}s, and Sevoflurane never sees your password.")
+                if !download.failedItems.isEmpty {
+                    failures
+                } else if !store.toolkitIsOpen {
+                    // The offer is read before Apple's page is asked for; with
+                    // the page up, the room is the page's.
+                    Text("They need Apple\u{2019}s Game Porting Toolkit, a free download from Apple. Apple asks you to sign in with an Apple Account to download it. Apple\u{2019}s own page asks for it, and Sevoflurane never sees your password.")
                         .fixedSize(horizontal: false, vertical: true)
                     Text("Later: Settings \u{203A} Graphics.")
                         .font(SettingsType.caption)
@@ -31,16 +33,46 @@ struct SetupToolkitCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if store.toolkitIsOpen {
-                route
-            } else {
-                SettingsRow(title: "Rather use your own browser?") {
+            if download.failedItems.isEmpty {
+                if store.toolkitIsOpen {
+                    route
+                } else {
                     Button("Use My Browser") { store.useBrowserForToolkit() }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
         }
         .onAppear { download.isOnScreen = true }
         .onDisappear { download.isOnScreen = false }
+    }
+
+    /// Each download that failed, with its reason, and what the versions
+    /// that did install are good for meanwhile.
+    @ViewBuilder private var failures: some View {
+        ForEach(download.failedItems) { item in
+            if case let .failed(reason) = item.phase {
+                SettingsStatus(.failure, String(localized: "\(Self.name(of: item)) did not download: \(Self.lowercasedFirst(reason))"))
+            }
+        }
+        let installed = download.items.compactMap { item -> String? in
+            if case let .installed(version) = item.phase { version } else { nil }
+        }
+        if !installed.isEmpty {
+            Text("\(installed.formatted(.list(type: .and))) is installed. Games that need the newer version wait for this one.")
+                .font(SettingsType.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private static func name(of item: GPTkDownload.Item) -> String {
+        GPTkDownload.version(inFilename: item.filename).map { "Game Porting Toolkit \($0)" } ?? item.filename
+    }
+
+    /// A reason that follows a colon starts in lowercase.
+    private static func lowercasedFirst(_ text: String) -> String {
+        let lowered = text.prefix(1).lowercased() + text.dropFirst()
+        return lowered.hasSuffix(".") ? lowered : lowered + "."
     }
 
     @ViewBuilder private var route: some View {
@@ -55,25 +87,29 @@ struct SetupToolkitCard: View {
                         Button("Use My Browser") { store.useBrowserForToolkit() }
                     }
                     GPTkSignInHint(download: download)
-                    GPTkApplePage(download: download, product: Self.product)
-                        .frame(height: SetupMetrics.applePageHeight)
+                    GPTkApplePage(download: download)
+                        .frame(height: layout.applePageHeight)
                 } else {
                     GPTkSimulatedPage()
-                }
-                if !download.items.isEmpty, !download.coversPageWithItems {
-                    GPTkItemList(download: download, product: Self.product)
                 }
             }
         case .browser:
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
-                GPTkBrowserRoute(
-                    watch: download.folderWatch,
-                    instruction: "Sign in on Apple\u{2019}s page with any Apple Account and download \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer. Sevoflurane installs it the moment it lands.",
-                )
-                if !download.items.isEmpty {
-                    GPTkItemList(download: download, product: Self.product)
+                Text("Sign in on Apple\u{2019}s page with any Apple Account and download \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer, Apple\u{2019}s name for the toolkit.")
+                    .font(SettingsType.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Apple\u{2019}s Download Page") {
+                    NSWorkspace.shared.open(GPTkDownload.pageURL)
                 }
+                SettingsStatus(.working, String(localized: "Waiting for the download in your Downloads folder."))
+                Button("Saved it somewhere else?") {
+                    if let image = ToolkitImagePanel.choose() { download.installLocal(image) }
+                }
+                .buttonStyle(.link)
+                .font(SettingsType.caption)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

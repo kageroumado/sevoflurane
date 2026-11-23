@@ -108,11 +108,35 @@ struct SetupFlowTests {
     // MARK: - Questions during the work
 
     @Test
-    func `the progress page asks sharing first, then the toolkit, each only when open`() {
-        #expect(SetupFlow.cards(sharingIsAnswered: false, offersToolkit: true) == [.sharing, .toolkit])
+    func `the progress page asks the toolkit first, then sharing, each only when open`() {
+        #expect(SetupFlow.cards(sharingIsAnswered: false, offersToolkit: true) == [.toolkit, .sharing])
         #expect(SetupFlow.cards(sharingIsAnswered: true, offersToolkit: true) == [.toolkit])
         #expect(SetupFlow.cards(sharingIsAnswered: false, offersToolkit: false) == [.sharing])
         #expect(SetupFlow.cards(sharingIsAnswered: true, offersToolkit: false).isEmpty)
+    }
+
+    @Test
+    func `a Steam that has to be closed is asked about last, and its decline leads back`() {
+        let steam = candidate("Steam")
+        let games = candidate("Games")
+        var facts = SetupFlow.Facts(candidates: [steam, games], chosenSteam: games.id)
+        facts.closesRunningSteam = true
+        #expect(SetupFlow.questions(facts) == [.whichSteam, .closeSteam])
+        #expect(SetupFlow.screen(after: .whichSteam, facts) == .closeSteam)
+        #expect(SetupFlow.screen(after: .closeSteam, facts) == .progress)
+        #expect(SetupFlow.screen(before: .closeSteam, facts) == .whichSteam)
+
+        var alone = SetupFlow.Facts()
+        alone.closesRunningSteam = true
+        #expect(SetupFlow.screen(after: .welcome, alone) == .closeSteam)
+        #expect(SetupFlow.screen(before: .closeSteam, alone) == .welcome)
+    }
+
+    @Test
+    func `the login checkbox starts ticked only where nobody has decided yet`() {
+        #expect(SetupFlow.opensAtLoginByDefault(isRegistered: false, hasBeenSetUp: false))
+        #expect(!SetupFlow.opensAtLoginByDefault(isRegistered: false, hasBeenSetUp: true))
+        #expect(SetupFlow.opensAtLoginByDefault(isRegistered: true, hasBeenSetUp: true))
     }
 
     // MARK: - Whether the assistant opens

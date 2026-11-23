@@ -462,7 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if supervisor.daemonIsUnreachable { return .helperDown }
         if host.hasLoginWindow { return .signIn }
         if host.desktop != nil { return .library }
-        if case let .gaveUp(reason) = supervisor.health { return .gaveUp(reason) }
+        if case .gaveUp = supervisor.health { return .gaveUp }
         return .starting
     }
 
@@ -480,6 +480,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and the rest keep their defaults, which touch nothing.
         if !provisioner.isDryRun {
             actions.steamWindow = { [weak self] in self?.setupSteamWindow ?? .starting }
+            actions.steamIsRunning = {
+                // The background helper keeps a Steam through an app that crashed.
+                let health = await DaemonService.status()?["health"] as? String
+                return ["healthy", "degraded", "waitingForSignIn", "restarting", "launching"].contains(health)
+            }
             actions.stopClient = { [weak self] narrate in
                 await self?.supervisor.stopBeforeBottleSwitch(narrate: narrate)
             }

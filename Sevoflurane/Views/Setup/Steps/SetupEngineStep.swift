@@ -10,12 +10,12 @@ struct SetupEngineStep: View {
         SetupScreenLayout {
             SetupPage(
                 title: "How games run",
-                subtitle: "This Mac has CrossOver, so Steam can run on either.",
+                subtitle: "CrossOver is on this Mac, so Steam can use it instead.",
             ) {
                 SetupList {
                     SettingsChoice(
                         title: "Dormison",
-                        caption: String(localized: "Sevoflurane\u{2019}s own engine. Free."),
+                        caption: String(localized: "Built into Sevoflurane. Free."),
                         isSelected: store.engineChoice == .builtIn,
                     ) {
                         store.engineChoice = .builtIn
@@ -23,7 +23,9 @@ struct SetupEngineStep: View {
                     if let crossover = store.provisioner.detection?.usableCrossOver {
                         SettingsChoice(
                             title: "\(crossover.label)",
-                            caption: String(localized: "From CodeWeavers. \(crossover.licenseWord)"),
+                            caption: crossover.licensed
+                                ? String(localized: "Uses your CrossOver license.")
+                                : String(localized: "Uses your CrossOver trial."),
                             isSelected: store.engineChoice == .crossover,
                         ) {
                             store.engineChoice = .crossover

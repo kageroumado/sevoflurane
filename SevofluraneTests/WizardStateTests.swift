@@ -25,13 +25,13 @@ struct WizardStateTests {
 
     @Test
     func `every state is on the screen its name says`() async {
-        let screens: [String: SetupScreen] = [
-            "1-welcome": .welcome, "2-which-steam": .whichSteam, "3-engine": .engine, "4-progress": .progress,
-            "5-done": .done,
+        let screens: [(prefix: String, screen: SetupScreen)] = [
+            ("1-welcome", .welcome), ("2-which-steam", .whichSteam), ("3-engine", .engine),
+            ("3-close-steam", .closeSteam), ("4-progress", .progress), ("5-done", .done),
         ]
         for state in WizardState.all {
             await state.arrange()
-            let expected = screens.first { state.id.hasPrefix($0.key) }?.value
+            let expected = screens.first { state.id.hasPrefix($0.prefix) }?.screen
             let reached = await eventually { state.store.screen == expected }
             #expect(reached, "\(state.id) is on \(state.store.screen.rawValue)")
         }
@@ -45,6 +45,9 @@ struct WizardStateTests {
         #expect(provisioner.stage == .engine)
         #expect(provisioner.isWorking)
         #expect(provisioner.passFraction > 0)
+        #expect(provisioner.stageSecondsLeft == nil)
+        let timed = try await arranged("4-progress-time-left").provisioner
+        #expect(timed.stageSecondsLeft == 240)
     }
 
     @Test
@@ -60,6 +63,16 @@ struct WizardStateTests {
     }
 
     @Test
+    func `closing a running Steam is a stage of the run, working or failed`() async throws {
+        let closing = try await arranged("4-progress-closing-steam").provisioner
+        let working = await eventually { closing.stage == .steamStop && closing.isWorking }
+        #expect(working)
+        let refused = try await arranged("4-progress-closing-steam-failed").provisioner
+        let failed = await eventually { refused.failure?.stage == .steamStop }
+        #expect(failed)
+    }
+
+    @Test
     func `the questions are up on the states named for them`() async throws {
         let sharing = try await arranged("4-progress-sharing")
         #expect(sharing.card == .sharing)
@@ -70,13 +83,33 @@ struct WizardStateTests {
         let offer = try await arranged("4-progress-toolkit")
         #expect(offer.card == .toolkit)
         #expect(!offer.toolkitIsOpen)
-        #expect(!offer.wantsTallWindow)
+        #expect(!offer.showsApplePage)
         let signIn = try await arranged("4-progress-toolkit-sign-in")
-        #expect(signIn.toolkitIsOpen)
-        #expect(signIn.wantsTallWindow)
+        #expect(signIn.showsApplePage)
         let browser = try await arranged("4-progress-toolkit-browser")
-        #expect(browser.toolkit.folderWatch.isWatching)
-        #expect(!browser.wantsTallWindow)
+        #expect(browser.toolkitIsOpen)
+        #expect(!browser.showsApplePage)
+        // Downloads under way fold the offer away and bring the next question up.
+        let running = try await arranged("4-progress-toolkit-running")
+        #expect(running.card == .sharing)
+        #expect(running.toolkit.downloadFraction != nil)
+        let failed = try await arranged("4-progress-toolkit-failed")
+        #expect(failed.card == .toolkit)
+        #expect(failed.toolkit.failedItems.count == 1)
+    }
+
+    @Test
+    func `a short display caps the window and gives Apple's page what is left`() throws {
+        let small = try #require(WizardState.all.first { $0.id == "4-progress-toolkit-sign-in-13-inch" })
+        small.layout.pageHeight = 2000
+        #expect(small.layout.windowHeight == small.layout.heightLimit)
+        #expect(small.layout.applePageHeight < SetupMetrics.applePageHeight.upperBound)
+        #expect(small.layout.applePageHeight >= SetupMetrics.applePageHeight.lowerBound)
+        let roomy = SetupLayout()
+        roomy.pageHeight = 300
+        #expect(roomy.windowHeight == SetupMetrics.windowSize.height)
+        roomy.pageHeight = 700
+        #expect(roomy.windowHeight == 700 + SetupMetrics.barHeight)
     }
 
     @Test

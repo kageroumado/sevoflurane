@@ -206,13 +206,11 @@ private struct SetupUnfinishedNotice: View {
             NoticeCard(
                 symbol: "exclamationmark.triangle.fill", tint: .orange,
                 title: "Setup stopped",
-                detail: "\([failure.stage?.failedSentence ?? "", failure.text].filter { !$0.isEmpty }.joined(separator: " "))",
+                detail: "\([failure.stage?.failedSentence ?? "", failure.cause].filter { !$0.isEmpty }.joined(separator: " "))",
             ) {
                 Button("Try Again") { store.tryAgain() }
                     .buttonStyle(.glassProminent)
                     .foregroundStyle(Theme.onAccent)
-                Button("Open Setup") { setup.show() }
-                    .buttonStyle(.glass)
             }
         } else if let store = setup.store, let stage = store.provisioner.stage, store.provisioner.isWorking {
             NoticeCard(
@@ -222,15 +220,29 @@ private struct SetupUnfinishedNotice: View {
                 onTap: { setup.show() },
             ) { EmptyView() }
                 .accessibilityLabel("Continue setup")
+        } else if let store = setup.store, store.workIsDone {
+            let isReady = store.screen == .done
+            NoticeCard(
+                symbol: "checkmark.circle.fill", tint: .green,
+                title: "Steam is installed",
+                detail: isReady ? "It opens when setup closes." : "Setup has a question left.",
+            ) {
+                Button(isReady ? "Open Steam" : "Continue Setup") {
+                    if isReady { store.finish() } else { setup.show() }
+                }
+                .buttonStyle(.glassProminent)
+                .foregroundStyle(Theme.onAccent)
+            }
         } else {
             NoticeCard(
                 symbol: "wand.and.stars", tint: .accentColor,
-                title: "Finish setting up",
-                detail: setup.store?.workIsDone == true
-                    ? "Steam is installed. It opens from the last screen of setup."
-                    : "Continue setup where you left off. Steam opens from its last step.",
-            ) { setup.show() }
-                .accessibilityLabel("Continue setup")
+                title: "Setup is not finished",
+                detail: "Steam opens from its last screen.",
+            ) {
+                Button("Continue Setup") { setup.show() }
+                    .buttonStyle(.glassProminent)
+                    .foregroundStyle(Theme.onAccent)
+            }
         }
     }
 

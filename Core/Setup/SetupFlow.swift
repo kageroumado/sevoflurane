@@ -7,6 +7,8 @@ nonisolated enum SetupScreen: String, CaseIterable, Sendable {
     case whichSteam
     /// Asked where a new Steam could run on either engine.
     case engine
+    /// Asked where a Steam that is running has to be closed first.
+    case closeSteam
     /// The work, and the questions asked during it.
     case progress
     case done
@@ -42,6 +44,9 @@ nonisolated enum SetupFlow {
         var hasUsableCrossOver = false
         /// The Steam the person chose on its page, `nil` for a new one.
         var chosenSteam: SteamCandidate.ID?
+        /// Whether a Steam is running that the work has to close to move to
+        /// the one chosen.
+        var closesRunningSteam = false
     }
 
     /// Whether the assistant asks which Steam: only among several.
@@ -68,6 +73,7 @@ nonisolated enum SetupFlow {
         var pages: [SetupScreen] = []
         if asksWhichSteam(facts) { pages.append(.whichSteam) }
         if asksEngine(facts) { pages.append(.engine) }
+        if facts.closesRunningSteam { pages.append(.closeSteam) }
         return pages
     }
 
@@ -118,12 +124,21 @@ nonisolated enum SetupFlow {
         return (2...).lazy.map { "\(base) \($0)" }.first { !taken.contains($0) } ?? base
     }
 
-    /// The questions the progress page still has to ask, in order.
+    /// The questions the progress page still has to ask, in order: the
+    /// toolkit first, since its download can then run beside Steam's, and
+    /// sharing, which takes one press, second.
     static func cards(sharingIsAnswered: Bool, offersToolkit: Bool) -> [SetupCard] {
         var cards: [SetupCard] = []
-        if !sharingIsAnswered { cards.append(.sharing) }
         if offersToolkit { cards.append(.toolkit) }
+        if !sharingIsAnswered { cards.append(.sharing) }
         return cards
+    }
+
+    /// Whether the last screen's login checkbox starts ticked: on a Mac
+    /// where no assistant has run to its end and no engine choice is stored,
+    /// so nobody has decided about a login item yet; otherwise what the Mac has.
+    static func opensAtLoginByDefault(isRegistered: Bool, hasBeenSetUp: Bool) -> Bool {
+        isRegistered || !hasBeenSetUp
     }
 
     /// How the assistant opens at launch.

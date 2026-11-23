@@ -20,13 +20,11 @@ struct SetupWhichSteamStep: View {
                             isSelected: store.steamChoice == candidate.id,
                         ) {
                             store.steamChoice = candidate.id
-                        } detail: {
-                            Button("Reveal in Finder", systemImage: "magnifyingglass") {
+                        }
+                        .contextMenu {
+                            Button("Reveal in Finder") {
                                 NSWorkspace.shared.activateFileViewerSelecting([candidate.bottle.url])
                             }
-                            .labelStyle(.iconOnly)
-                            .buttonStyle(.borderless)
-                            .help("Reveal in Finder")
                         }
                     }
                     SettingsChoice(

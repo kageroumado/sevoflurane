@@ -25,7 +25,11 @@ final class SetupWindow {
     /// Opens the assistant in a new window, replacing any earlier one.
     func present(_ store: SetupStore) {
         finish()
-        let controller = NSHostingController(rootView: SetupView(store: store))
+        let layout = SetupLayout()
+        if let visible = NSScreen.main?.visibleFrame {
+            layout.heightLimit = visible.height - SetupMetrics.screenMargin
+        }
+        let controller = NSHostingController(rootView: SetupView(store: store, layout: layout))
         // Sized here from ``SetupMetrics``: left to the hosting controller, a
         // tall screen grows the window and it never shrinks back.
         controller.sizingOptions = []
@@ -51,22 +55,23 @@ final class SetupWindow {
         self.window = window
         self.store = store
         heightFollower = Task(name: "Follow the assistant's height") { [weak self] in
-            for await isTall in Observations({ store.wantsTallWindow }) {
-                self?.resize(tall: isTall)
+            for await height in Observations({ layout.windowHeight }) {
+                self?.resize(toHeight: height)
             }
         }
         window.center()
         show()
     }
 
-    /// Switches between ``SetupMetrics/tallWindowHeight`` (within the screen)
-    /// and ``SetupMetrics/windowSize``, keeping the top edge in place.
-    private func resize(tall: Bool) {
+    /// Gives the window the height its screen asks for (``SetupLayout``),
+    /// within the display it is on, keeping the top edge in place.
+    private func resize(toHeight height: CGFloat) {
         guard let window else { return }
         let visible = (window.screen ?? NSScreen.main)?.visibleFrame
         var size = SetupMetrics.windowSize
-        if tall, let visible {
-            size.height = max(size.height, min(SetupMetrics.tallWindowHeight, visible.height - 40))
+        size.height = max(size.height, height)
+        if let visible {
+            size.height = min(size.height, visible.height - SetupMetrics.screenMargin)
         }
         guard window.contentRect(forFrameRect: window.frame).size != size else { return }
         var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))

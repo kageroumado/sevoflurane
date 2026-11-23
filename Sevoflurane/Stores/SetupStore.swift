@@ -13,9 +13,8 @@ enum SetupSteamWindow: Equatable {
     case starting
     /// The background helper that starts Steam is not running.
     case helperDown
-    /// Steam was started and did not come up; the reason, as the supervisor
-    /// words it.
-    case gaveUp(String)
+    /// Steam was started and did not come up.
+    case gaveUp
     /// Steam's login window exists.
     case signIn
     /// Steam's library window exists.
@@ -33,6 +32,8 @@ final class SetupStore {
     struct Actions {
         /// Which of Steam's windows exists, read when the last screen draws.
         var steamWindow: () -> SetupSteamWindow = { .library }
+        /// Whether a Steam of this app is running now.
+        var steamIsRunning: () async -> Bool = { false }
         /// Stops a Steam running elsewhere before the choice moves,
         /// narrating through its argument; answers why it could not.
         var stopClient: (_ narrate: (String) -> Void) async -> String? = { _ in nil }
@@ -67,14 +68,16 @@ final class SetupStore {
     private(set) var isAdopting = false
     /// What the last helper repair came to.
     private(set) var helperRepair: DaemonService.RepairResult?
-    /// Whether Sevoflurane opens at login, as this Mac has it.
-    private(set) var opensAtLogin: Bool
     private(set) var isRepairingHelper = false
+    /// Whether Sevoflurane opens at login once the assistant is finished.
+    var opensAtLogin: Bool
 
     /// Whether detection and the candidates' facts are in.
     private var isPrepared = false
     /// The welcome's button was pressed before the Mac had been looked at.
     private var beginsWhenPrepared = false
+    /// Whether a Steam of this app was running when the Mac was looked at.
+    private var steamIsRunning = false
     /// The Steam folder a refused stop kept the pass from moving to.
     private var unreachedBottle: String?
     private var hasDeclinedToolkit = false
@@ -95,9 +98,16 @@ final class SetupStore {
         self.actions = actions
         isResuming = resuming
         screen = resuming ? .progress : .welcome
-        opensAtLogin = provisioner.openAtLogin
-        provisioner.environment.assistantInProgress = true
-        graphics.toolkitDownload.onInstalled = { [weak self] _ in self?.questionAnswered() }
+        let environment = provisioner.environment
+        // A stored engine choice with no assistant on record is an
+        // installation an earlier version set up.
+        let hasBeenSetUp = environment.assistantHasFinished
+            || (environment.storedEngineIsManaged != nil && !environment.assistantInProgress)
+        opensAtLogin = SetupFlow.opensAtLoginByDefault(
+            isRegistered: provisioner.openAtLogin, hasBeenSetUp: hasBeenSetUp,
+        )
+        environment.assistantInProgress = true
+        graphics.toolkitDownload.onChange = { [weak self] in self?.questionAnswered() }
         if resuming {
             refreshCards()
             if cards.isEmpty { screen = .done }
@@ -107,11 +117,13 @@ final class SetupStore {
     // MARK: - What the screens read
 
     var facts: SetupFlow.Facts {
-        SetupFlow.Facts(
+        var facts = SetupFlow.Facts(
             candidates: candidates,
             hasUsableCrossOver: provisioner.detection?.usableCrossOver != nil,
             chosenSteam: steamChoice,
         )
+        facts.closesRunningSteam = steamIsRunning && provisioner.closesSteam(toChoose: target(facts).bottle)
+        return facts
     }
 
     /// The question the progress screen is asking.
@@ -132,25 +144,13 @@ final class SetupStore {
         provisioner.failure != nil
     }
 
-    /// Whether the screen before this one can be gone back to: a question
-    /// screen, where nothing has been touched yet.
-    var canGoBack: Bool {
-        SetupFlow.screen(before: screen, facts) != nil
-    }
-
     var steamWindow: SetupSteamWindow {
         actions.steamWindow()
     }
 
-    /// Whether the window takes its tall height: Apple's page is up.
-    var wantsTallWindow: Bool {
+    /// Whether Apple's page is up in this window.
+    var showsApplePage: Bool {
         screen == .progress && card == .toolkit && toolkitIsOpen && toolkit.route == .here && toolkit.showsApplePage
-    }
-
-    /// Registers or removes the login item, and shows what the Mac then says.
-    func setOpensAtLogin(_ opens: Bool) {
-        provisioner.setOpenAtLogin(opens)
-        opensAtLogin = provisioner.openAtLogin
     }
 
     // MARK: - Looking at the Mac
@@ -167,10 +167,11 @@ final class SetupStore {
             found.append(SteamCandidate(bottle: bottle, isManaged: isManaged, facts: facts))
         }
         candidates = found
+        steamIsRunning = await actions.steamIsRunning()
         if !isPrepared {
             steamChoice = SetupFlow.preselectedSteam(among: found, storedName: environment.bottleName)
             let startsOnCrossOver = SetupFlow.startsOnCrossOver(
-                hasUsableCrossOver: facts.hasUsableCrossOver,
+                hasUsableCrossOver: provisioner.detection?.usableCrossOver != nil,
                 storedChoiceIsManaged: environment.storedEngineIsManaged,
                 steamIsInCrossOver: found.contains { !$0.isManaged },
             )
@@ -198,10 +199,12 @@ final class SetupStore {
 
     /// A question screen's Continue. The work starts after the last one.
     func answerQuestion() {
-        guard screen == .whichSteam || screen == .engine else { return }
+        guard screen == .whichSteam || screen == .engine || screen == .closeSteam else { return }
         advance()
     }
 
+    /// Back, or the decline of a question asked before the work: the screen
+    /// before this one, where nothing has been touched yet.
     func goBack() {
         guard let previous = SetupFlow.screen(before: screen, facts) else { return }
         screen = previous
@@ -218,25 +221,40 @@ final class SetupStore {
 
     // MARK: - The work
 
-    private func startWork() {
-        let adopted = SetupFlow.adopted(facts)
-        let usesManagedEngine = adopted?.isManaged ?? (!facts.hasUsableCrossOver || engineChoice == .builtIn)
-        environment.storeEngineChoice(managed: usesManagedEngine)
-        let bottle: String
-        if let adopted {
-            bottle = adopted.bottle.name
-        } else {
-            let sameEngine = (provisioner.detection?.bottles ?? [])
-                .filter { environment.engineIsManaged(ofBottleAt: $0.url) == usesManagedEngine }
-            bottle = SetupFlow.newSteamName(
-                stored: environment.bottleName, base: SteamBottle.defaultName, bottles: sameEngine,
-            )
+    /// The Steam folder the work sets up and the engine it lives with, as
+    /// the answers so far have it.
+    private func target(_ facts: SetupFlow.Facts) -> (bottle: String, isManaged: Bool, isAdopted: Bool) {
+        if let adopted = SetupFlow.adopted(facts) {
+            return (adopted.bottle.name, adopted.isManaged, true)
         }
-        isAdopting = adopted != nil
-        EventLog.shared.log(.setup, adopted == nil ? "setup: a new Steam in \(bottle)" : "setup: taking over the Steam in \(bottle)")
+        let isManaged = !facts.hasUsableCrossOver || engineChoice == .builtIn
+        let sameEngine = (provisioner.detection?.bottles ?? [])
+            .filter { environment.engineIsManaged(ofBottleAt: $0.url) == isManaged }
+        let bottle = SetupFlow.newSteamName(
+            stored: environment.bottleName, base: SteamBottle.defaultName, bottles: sameEngine,
+        )
+        return (bottle, isManaged, false)
+    }
+
+    private func startWork() {
+        var answers = SetupFlow.Facts(
+            candidates: candidates,
+            hasUsableCrossOver: provisioner.detection?.usableCrossOver != nil,
+            chosenSteam: steamChoice,
+        )
+        answers.closesRunningSteam = false
+        // The engine first: which folders belong to it follows from it.
+        let engineIsManaged = SetupFlow.adopted(answers)?.isManaged
+            ?? (!answers.hasUsableCrossOver || engineChoice == .builtIn)
+        environment.storeEngineChoice(managed: engineIsManaged)
+        let target = target(answers)
+        isAdopting = target.isAdopted
+        EventLog.shared.log(
+            .setup, target.isAdopted ? "setup: taking over the Steam in \(target.bottle)" : "setup: a new Steam in \(target.bottle)",
+        )
         screen = .progress
         refreshCards()
-        runPass(into: bottle)
+        runPass(into: target.bottle)
     }
 
     /// Moves the choice to `bottle` and provisions it. One pass at a time.
@@ -286,8 +304,6 @@ final class SetupStore {
     private func passEnded() {
         guard provisioner.activity == .done else { return }
         startClientOnce()
-        // The engine is known only once installed: the toolkit question
-        // belongs to the built-in one.
         refreshCards()
         finishIfNothingIsLeft()
     }
@@ -300,16 +316,26 @@ final class SetupStore {
 
     // MARK: - The questions asked during the work
 
+    /// Whether the toolkit is this assistant's to offer: the built-in
+    /// engine on a Mac that runs it, with none installed and none on its way,
+    /// or with a download that failed and can be tried again.
+    private var offersToolkit: Bool {
+        guard !hasDeclinedToolkit, environment.usesManagedEngine, environment.runsD3DMetal,
+              !graphics.engineHasOwnD3DMetal else { return false }
+        if !toolkit.failedItems.isEmpty { return true }
+        return graphics.d3dMetalVersions.isEmpty && toolkit.items.isEmpty
+    }
+
     private func refreshCards() {
-        let offersToolkit = !hasDeclinedToolkit && environment.usesManagedEngine && environment.runsD3DMetal
-            && graphics.d3dMetalVersions.isEmpty && !graphics.engineHasOwnD3DMetal
         let open = SetupFlow.cards(
             sharingIsAnswered: environment.sharesRunStats != nil, offersToolkit: offersToolkit,
         )
         if open != cards { cards = open }
-        if card != .toolkit, toolkitIsOpen { toolkitIsOpen = false }
+        if card != .toolkit || !toolkit.items.isEmpty, toolkitIsOpen { toolkitIsOpen = false }
     }
 
+    /// A question was answered, or the toolkit's download moved: the next
+    /// question comes up, or the last screen.
     private func questionAnswered() {
         refreshCards()
         finishIfNothingIsLeft()
@@ -338,6 +364,11 @@ final class SetupStore {
         toolkitIsOpen = true
     }
 
+    /// Starts the toolkit downloads that failed again.
+    func retryToolkit() {
+        toolkit.retryFailed()
+    }
+
     /// Leaves the toolkit for later. A download under way carries on and
     /// installs when it ends.
     func declineToolkit() {
@@ -348,13 +379,23 @@ final class SetupStore {
     // MARK: - The last screen
 
     func finish() {
-        environment.assistantInProgress = false
+        closeAssistant()
         actions.finish()
     }
 
     func skipSignIn() {
-        environment.assistantInProgress = false
+        closeAssistant()
         actions.skipSignIn()
+    }
+
+    /// Puts the login item where the checkbox has it and takes the assistant
+    /// off the record.
+    private func closeAssistant() {
+        if opensAtLogin != provisioner.openAtLogin {
+            provisioner.setOpenAtLogin(opensAtLogin)
+        }
+        environment.assistantInProgress = false
+        environment.assistantHasFinished = true
     }
 
     func repairHelper() {

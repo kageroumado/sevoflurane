@@ -5,6 +5,8 @@ import SwiftUI
 /// its own content and its own buttons.
 struct SetupView: View {
     let store: SetupStore
+    /// How tall the window is; its owner follows it.
+    let layout: SetupLayout
 
     var body: some View {
         Group {
@@ -12,9 +14,16 @@ struct SetupView: View {
             case .welcome: SetupWelcomeStep(store: store)
             case .whichSteam: SetupWhichSteamStep(store: store)
             case .engine: SetupEngineStep(store: store)
+            case .closeSteam: SetupCloseSteamStep(store: store)
             case .progress: SetupProgressStep(store: store)
             case .done: SetupDoneStep(store: store)
             }
+        }
+        .environment(layout)
+        // The welcome and the last screen fit the window at its least and
+        // measure nothing; every other screen measures itself.
+        .onChange(of: store.screen) { _, screen in
+            if screen == .welcome || screen == .done { layout.pageHeight = 0 }
         }
         .frame(width: SetupMetrics.windowSize.width)
         .frame(maxHeight: .infinity)

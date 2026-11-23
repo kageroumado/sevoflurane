@@ -163,20 +163,30 @@
             // A run ends a few main-actor turns after the button that starts it.
             try? await Task.sleep(for: settleDelay)
             let width = SetupMetrics.windowSize.width
-            // A height of `nil` is the content's own.
-            var screens: [(name: String, view: AnyView, width: CGFloat, height: CGFloat?)] =
-                WizardState.all.map { ("setup-\($0.id)", AnyView(SetupView(store: $0.store)), width, $0.height) }
+            // A screen of the assistant says how tall its window is once it
+            // has been laid out (`layout`); a popover is as tall as its content.
+            var screens: [(name: String, view: AnyView, width: CGFloat, layout: SetupLayout?)] =
+                WizardState.all.map { state in
+                    // The assistant is key whenever it is up; an offscreen
+                    // window never is, and draws its controls as inactive.
+                    let view = SetupView(store: state.store, layout: state.layout).environment(\.appearsActive, true)
+                    return ("setup-\(state.id)", AnyView(view), width, state.layout)
+                }
             screens += Fixtures.setupPopovers.map { entry in
                 ("setup-popover-\(entry.name)", AnyView(entry.popover.view), Theme.popoverWidth + Theme.Space.md * 2, nil)
             }
             let hosts = screens.map { screen in
+                // The popover's cards are glass, which an offscreen window
+                // draws only as inactive, and without its buttons.
                 let host = NSHostingView(rootView: screen.view
-                    .frame(width: screen.width, height: screen.height)
+                    .frame(width: screen.width)
                     .background(Color(nsColor: .windowBackgroundColor)))
                 let window = NSWindow(
                     contentRect: NSRect(
                         origin: CGPoint(x: -20000, y: -20000),
-                        size: CGSize(width: screen.width, height: screen.height ?? probeHeight),
+                        size: CGSize(
+                            width: screen.width, height: screen.layout == nil ? probeHeight : SetupMetrics.windowSize.height,
+                        ),
                     ),
                     styleMask: [.borderless], backing: .buffered, defer: false,
                 )
@@ -186,12 +196,15 @@
                     window.backgroundColor = .windowBackgroundColor
                 }
                 window.orderBack(nil)
-                return (name: screen.name, host: host, window: window, fitsContent: screen.height == nil)
+                return (name: screen.name, host: host, window: window, layout: screen.layout)
             }
             try? await Task.sleep(for: settleDelay)
-            for entry in hosts where entry.fitsContent {
-                entry.window.setContentSize(entry.host.fittingSize)
+            for entry in hosts {
+                let height = entry.layout?.windowHeight ?? entry.host.fittingSize.height
+                entry.window.setContentSize(CGSize(width: entry.host.bounds.width, height: height))
+                entry.host.layoutSubtreeIfNeeded()
             }
+            try? await Task.sleep(for: .seconds(1))
             for entry in hosts {
                 entry.host.layoutSubtreeIfNeeded()
                 let rect = entry.host.bounds

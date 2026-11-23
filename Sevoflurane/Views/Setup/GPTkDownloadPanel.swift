@@ -88,8 +88,6 @@ enum GPTkMetrics {
     static let radius: CGFloat = 10
     static let itemRadius: CGFloat = 8
     static let coverWidth: CGFloat = 380
-    /// Settings names the part of Apple's toolkit it installs.
-    static let settingsProduct = "D3DMetal"
 }
 
 /// The sign-in hint, or in the manual fallback the row to click, named as
@@ -100,7 +98,9 @@ struct GPTkSignInHint: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             if download.autoPhase == .manual {
-                SettingsStatus(.warning, manualHint)
+                Text(manualHint)
+                    .font(SettingsType.caption)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Sign in with any Apple Account, and accept Apple\u{2019}s free developer agreement if it asks. The paid Developer Program isn\u{2019}t needed. Sevoflurane picks the right download and installs it here.")
                     .font(SettingsType.caption)
@@ -115,9 +115,9 @@ struct GPTkSignInHint: View {
 
     private var manualHint: String {
         if let candidate = download.manualCandidate {
-            return String(localized: "Click Download on \u{201C}\(candidate)\u{201D}, outlined below. It installs here when its download ends.")
+            return String(localized: "Click Download next to \u{201C}\(candidate)\u{201D}, outlined on the page. It installs by itself.")
         }
-        return String(localized: "Click Download on \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer. It installs here when its download ends.")
+        return String(localized: "Click Download next to \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer. It installs by itself.")
     }
 }
 
@@ -125,8 +125,6 @@ struct GPTkSignInHint: View {
 /// they download.
 struct GPTkApplePage: View {
     let download: GPTkDownload
-    /// What the surface calls the thing being downloaded.
-    var product = GPTkMetrics.settingsProduct
 
     var body: some View {
         page
@@ -177,7 +175,7 @@ struct GPTkApplePage: View {
                     .font(SettingsType.caption.weight(.medium))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                GPTkItemList(download: download, product: product)
+                GPTkItemList(download: download)
                     .frame(maxWidth: GPTkMetrics.coverWidth)
                 if hasFailure, !download.isBusy {
                     Button("Show Apple\u{2019}s Page") { download.showPage() }
@@ -194,12 +192,12 @@ struct GPTkApplePage: View {
     private var coverTitle: Text {
         let versions = download.pickedVersions.formatted(.list(type: .and))
         if download.isBusy {
-            return Text("Downloading \(product) \(versions), nothing to click")
+            return Text("Downloading D3DMetal \(versions), nothing to click")
         }
         if hasFailure {
             return Text("A download stopped. Its reason is below.")
         }
-        return Text("\(product) \(versions) installed")
+        return Text("D3DMetal \(versions) installed")
     }
 }
 
@@ -207,15 +205,13 @@ struct GPTkApplePage: View {
 /// digits while it downloads, then installing, installed or why it failed.
 struct GPTkItemList: View {
     let download: GPTkDownload
-    /// What the surface calls the thing being downloaded.
-    var product = GPTkMetrics.settingsProduct
 
     var body: some View {
         VStack(spacing: Theme.Space.xs) {
             ForEach(download.items) { item in
                 VStack(alignment: .leading, spacing: SettingsMetrics.captionGap) {
                     HStack(spacing: Theme.Space.sm) {
-                        Text(verbatim: GPTkDownload.version(inFilename: item.filename).map { "\(product) \($0)" } ?? item.filename)
+                        Text(verbatim: GPTkDownload.version(inFilename: item.filename).map { "D3DMetal \($0)" } ?? item.filename)
                             .font(SettingsType.title)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -287,13 +283,10 @@ private struct GPTkWebViewRepresentable: NSViewRepresentable {
 /// folders it saves into are watched, visibly, until the image lands.
 struct GPTkBrowserRoute: View {
     let watch: GPTkFolderWatch
-    /// What to do on Apple's page, in the surface's own words for the toolkit.
-    var instruction: LocalizedStringResource =
-        "Sign in on Apple\u{2019}s page with any Apple Account and download \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer, the small file with D3DMetal in it. Sevoflurane installs it the moment it lands."
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            Text(instruction)
+            Text("Sign in on Apple\u{2019}s page with any Apple Account and download \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer, the small file with D3DMetal in it. Sevoflurane installs it the moment it lands.")
                 .font(SettingsType.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

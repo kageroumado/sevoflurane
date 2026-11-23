@@ -423,14 +423,14 @@
         var body: some View {
             GallerySection("First-run assistant — every machine", minimum: 700) {
                 ForEach(Fixtures.wizards, id: \.scenario) { entry in
-                    GalleryTile(entry.scenario.title) { wizard(entry.store) }
+                    GalleryTile(entry.scenario.title) { wizard(entry.store, entry.layout) }
                 }
             }
         }
 
-        private func wizard(_ store: SetupStore) -> some View {
-            SetupView(store: store)
-                .frame(height: SetupMetrics.windowSize.height)
+        private func wizard(_ store: SetupStore, _ layout: SetupLayout) -> some View {
+            SetupView(store: store, layout: layout)
+                .frame(height: layout.windowHeight)
                 .background(.background, in: Theme.cardShape)
                 .clipShape(Theme.cardShape)
         }
@@ -443,8 +443,8 @@
             GallerySection("First-run assistant — every screen and state", minimum: 700) {
                 ForEach(WizardState.all) { state in
                     GalleryTile(state.id) {
-                        SetupView(store: state.store)
-                            .frame(height: state.height)
+                        SetupView(store: state.store, layout: state.layout)
+                            .frame(height: state.layout.windowHeight)
                             .background(.background, in: Theme.cardShape)
                             .clipShape(Theme.cardShape)
                             .task { await state.arrange() }
@@ -752,7 +752,7 @@
 
         /// One wizard per fixture machine, each on its own provisioner so tiles
         /// advance independently.
-        static let wizards: [(scenario: SetupScenario, store: SetupStore)] =
+        static let wizards: [(scenario: SetupScenario, store: SetupStore, layout: SetupLayout)] =
             SetupScenario.allCases.map { scenario in
                 // Paced: with no think time every stage completes between two
                 // frames and every scenario looks already provisioned.
@@ -761,7 +761,7 @@
                         scenario: scenario, stepDelay: .milliseconds(900),
                     )),
                     graphics: Fixtures.wizardGraphics,
-                ))
+                ), SetupLayout())
             }
 
         static let settings = provisioner(.idle)

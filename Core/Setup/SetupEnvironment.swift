@@ -115,6 +115,13 @@ protocol SetupEnvironment: AnyObject {
     var sharesRunStats: Bool? { get }
     func answerSharing(_ shares: Bool)
 
+    /// Whether an assistant has run to its end on this Mac.
+    var assistantHasFinished: Bool { get set }
+
+    /// Whether a simulated machine has a Steam running that a move to
+    /// another Steam folder has to close. A live machine is asked itself.
+    var simulatesRunningSteam: Bool { get }
+
     /// Whether an assistant started on this Mac and has not finished. Set
     /// when one opens and cleared by its last page, so a Mac with Steam
     /// installed and nothing stored reads as finished.
@@ -141,6 +148,10 @@ extension SetupEnvironment {
 
     var wantsManagedEngine: Bool {
         Engine.preferenceWantsManaged
+    }
+
+    var simulatesRunningSteam: Bool {
+        false
     }
 
     var storedEngineIsManaged: Bool? {
@@ -532,6 +543,13 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     private static let assistantInProgressKey = "setupAssistantInProgress"
+
+    var assistantHasFinished: Bool {
+        get { Preferences.app.bool(forKey: Self.assistantHasFinishedKey) }
+        set { Preferences.app.set(newValue, forKey: Self.assistantHasFinishedKey) }
+    }
+
+    private static let assistantHasFinishedKey = "setupAssistantHasFinished"
 
     /// Captures stdout and stderr combined, which provisioning quotes in
     /// failure messages.

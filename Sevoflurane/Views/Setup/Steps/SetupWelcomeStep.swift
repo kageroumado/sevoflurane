@@ -17,9 +17,12 @@ struct SetupWelcomeStep: View {
                     .frame(width: SetupMetrics.heroPicture, height: SetupMetrics.heroPicture)
                     .accessibilityHidden(true)
             } content: {
-                Text("Free. Setup downloads Steam and what it needs to run on a Mac. You sign in to Steam at the end.")
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 2) {
+                    Text("Free. Setup downloads Steam and what it needs to run on a Mac.")
+                    Text("You sign in to Steam at the end.")
+                }
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             }
         } secondary: {
             EmptyView()

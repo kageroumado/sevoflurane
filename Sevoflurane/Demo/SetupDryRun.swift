@@ -139,6 +139,9 @@
         /// The fixture's answer to the sharing question.
         var sharesRunStats: Bool?
         var assistantInProgress = false
+        var assistantHasFinished = false
+        /// Whether the fixture has a Steam running in the folder it drives.
+        var simulatesRunningSteam = false
         /// Whether the fixture is an Apple silicon Mac.
         var runsD3DMetal = true
         /// What each of the fixture's Steams holds, by bottle name.

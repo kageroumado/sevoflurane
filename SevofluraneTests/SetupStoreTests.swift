@@ -59,7 +59,6 @@ struct SetupStoreTests {
         #expect(rig.store.screen == .welcome)
         rig.store.begin()
         #expect(rig.store.screen == .progress)
-        #expect(!rig.store.canGoBack)
         let finished = await eventually { rig.store.screen == .done }
         #expect(finished)
         #expect(rig.environment.storedEngineIsManaged == true)
@@ -91,7 +90,6 @@ struct SetupStoreTests {
         // Another engine's Steam and a bottle without Steam are no candidates.
         #expect(rig.store.candidates.map(\.bottle.name) == ["Steam", "Steam Beta", "Games"])
         #expect(rig.store.candidates.first { $0.id == rig.store.steamChoice }?.bottle.name == "Games")
-        #expect(rig.store.canGoBack)
         rig.store.goBack()
         #expect(rig.store.screen == .welcome)
         rig.store.begin()
@@ -188,23 +186,109 @@ struct SetupStoreTests {
     // MARK: - The questions asked during the work
 
     @Test
-    func `the work asks sharing, then the toolkit, and moves on when both are answered`() async {
+    func `the work asks the toolkit, then sharing, and moves on when both are answered`() async {
         let rig = makeRig(.freshMachine, detection: Self.plainMac, sharing: nil, toolkitInstalled: false)
         await rig.store.prepare()
         rig.store.begin()
-        #expect(rig.store.cards == [.sharing, .toolkit])
+        #expect(rig.store.cards == [.toolkit, .sharing])
         let installed = await eventually { rig.store.workIsDone }
         #expect(installed)
         // Steam is in, and the screen waits on its questions.
         #expect(rig.store.screen == .progress)
-        rig.store.answerSharing(true)
-        #expect(rig.environment.sharesRunStats == true)
-        #expect(rig.store.card == .toolkit)
         rig.store.openToolkitPage()
         #expect(rig.store.toolkitIsOpen)
         rig.store.declineToolkit()
         #expect(!rig.store.toolkitIsOpen)
+        #expect(rig.store.card == .sharing)
+        rig.store.answerSharing(true)
+        #expect(rig.environment.sharesRunStats == true)
         #expect(rig.store.screen == .done)
+    }
+
+    @Test
+    func `a toolkit download that starts answers the offer, and one that fails brings it back`() async {
+        let rig = makeRig(.freshMachine, detection: Self.plainMac, sharing: nil, toolkitInstalled: false) {
+            $0.hold = .clientUpdate
+        }
+        await rig.store.prepare()
+        rig.store.begin()
+        rig.store.openToolkitPage()
+        let file = "Evaluation_environment_for_Windows_games_4.0.dmg"
+        rig.store.toolkit.stage(items: [GPTkDownload.Item(id: 1, filename: file, fraction: 0.2, phase: .downloading)])
+        rig.store.toolkit.onChange?()
+        // The download runs on by itself; the next question is up.
+        #expect(rig.store.card == .sharing)
+        #expect(!rig.store.toolkitIsOpen)
+        rig.store.toolkit.stage(items: [GPTkDownload.Item(id: 1, filename: file, fraction: 0.2, phase: .failed("The network connection was lost."))])
+        rig.store.toolkit.onChange?()
+        #expect(rig.store.card == .toolkit)
+        rig.store.declineToolkit()
+        #expect(rig.store.card == .sharing)
+    }
+
+    @Test
+    func `a running Steam that the choice moves away from is asked about before the work`() async {
+        var stops = 0
+        let environment = DryRunSetupEnvironment(scenario: .multipleBottles, stepDelay: .zero)
+        environment.sharesRunStats = false
+        environment.simulatesRunningSteam = true
+        let provisioner = Provisioner(environment: environment)
+        var actions = SetupStore.Actions()
+        actions.steamIsRunning = { true }
+        actions.stopClient = { _ in
+            stops += 1
+            return nil
+        }
+        let graphics = GraphicsStore(environment: DemoGraphicsEnvironment(scenario: .builtInWithToolkit, stepDelay: .zero))
+        let store = SetupStore(provisioner: provisioner, graphics: graphics, actions: actions)
+        await store.prepare()
+        store.begin()
+        // The Steam this installation drives needs nothing closed.
+        store.steamChoice = store.candidates.first { $0.bottle.name == "Steam" }?.id
+        #expect(!store.facts.closesRunningSteam)
+        store.steamChoice = store.candidates.first { $0.bottle.name == "Games" }?.id
+        store.answerQuestion()
+        #expect(store.screen == .closeSteam)
+        // Not Now leads back, with nothing touched.
+        store.goBack()
+        #expect(store.screen == .whichSteam)
+        #expect(stops == 0)
+        store.answerQuestion()
+        store.answerQuestion()
+        #expect(store.screen == .progress)
+        let finished = await eventually { store.screen == .done }
+        #expect(finished)
+        #expect(stops == 1)
+        #expect(environment.bottleName == "Games")
+        #expect(provisioner.reports.first?.stage == .steamStop)
+    }
+
+    @Test
+    func `the login item is ticked on a Mac nobody has set up, and follows the Mac on one that was`() async {
+        let fresh = makeRig(.freshMachine, detection: Self.plainMac) { try? $0.setOpenAtLogin(false) }
+        #expect(fresh.store.opensAtLogin)
+        await fresh.store.prepare()
+        fresh.store.begin()
+        let finished = await eventually { fresh.store.screen == .done }
+        #expect(finished)
+        // Nothing is registered until the assistant closes.
+        #expect(!fresh.environment.openAtLogin)
+        fresh.store.finish()
+        #expect(fresh.environment.openAtLogin)
+        #expect(fresh.environment.assistantHasFinished)
+
+        // An installation an earlier version set up, whose owner turned it off.
+        let existing = makeRig(.freshMachine, detection: Self.plainMac) {
+            $0.storedEngineIsManaged = true
+            try? $0.setOpenAtLogin(false)
+        }
+        #expect(!existing.store.opensAtLogin)
+
+        let finishedBefore = makeRig(.freshMachine, detection: Self.plainMac) {
+            $0.assistantHasFinished = true
+            try? $0.setOpenAtLogin(false)
+        }
+        #expect(!finishedBefore.store.opensAtLogin)
     }
 
     @Test

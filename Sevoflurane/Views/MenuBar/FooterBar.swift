@@ -40,9 +40,17 @@ struct FooterBar: View {
                     actionsMenu
                     settingsButton
                 }
-                FooterIconButton(String(localized: "Quit Sevoflurane"), systemImage: "xmark", action: onQuit)
-                    .keyboardShortcut("q")
-                    .help("Quit Sevoflurane and close Steam")
+                if isSettingUp {
+                    // The bar's only control here, so it says what it does.
+                    Button("Quit", action: onQuit)
+                        .buttonStyle(.footerChip)
+                        .keyboardShortcut("q")
+                        .help("Quit Sevoflurane. Setup takes up where it stopped when it opens again.")
+                } else {
+                    FooterIconButton(String(localized: "Quit Sevoflurane"), systemImage: "xmark", action: onQuit)
+                        .keyboardShortcut("q")
+                        .help("Quit Sevoflurane and close Steam")
+                }
             }
         }
     }
