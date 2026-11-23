@@ -104,26 +104,6 @@
         }
       }
     },
-    "about %lld minutes left": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "大约剩余 %lld 分钟"
-          }
-        }
-      }
-    },
-    "about 1 minute left": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "大约剩余 1 分钟"
-          }
-        }
-      }
-    },
     "After a game closes, Sevoflurane sends its frame rate, resolution, engine and settings, with your Mac’s model and chip. Nothing identifies you, your Mac or your Steam account.": {
       "localizations": {
         "zh-Hans": {
@@ -524,16 +504,6 @@
         }
       }
     },
-    "less than a minute left": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "剩余不到 1 分钟"
-          }
-        }
-      }
-    },
     "Newer games (DirectX 12)": {
       "localizations": {
         "zh-Hans": {
@@ -604,16 +574,6 @@
         }
       }
     },
-    "Quit Steam yourself, then try again.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请自行退出 Steam，然后重试。"
-          }
-        }
-      }
-    },
     "Reveal in Finder": {
       "localizations": {
         "zh-Hans": {
@@ -630,6 +590,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存到了别的位置？"
+          }
+        }
+      }
+    },
+    "Send the file on Discord or in a GitHub issue.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请通过 Discord 或 GitHub issue 发送该文件。"
           }
         }
       }
@@ -844,12 +814,12 @@
         }
       }
     },
-    "Steam is still running and did not quit.": {
+    "Steam is still running and did not close.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steam 仍在运行，未能退出。"
+            "value": "Steam 仍在运行，未能关闭。"
           }
         }
       }
@@ -960,6 +930,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "“重试”会从头运行它。"
+          }
+        }
+      }
+    },
+    "Try again. If it keeps happening, restart your Mac.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请再试一次。如果问题反复出现，请重新启动 Mac。"
           }
         }
       }
