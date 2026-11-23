@@ -1,11 +1,10 @@
-import Propofol
 import SwiftUI
 
 /// Settings › Recovery: the actions that get a stuck installation running
 /// again (Steam and its menus, the background helper, the bottle and its
-/// Wine), and common problems with where each one's fix is. Every action
-/// keeps games and saves: the destructive-looking ones stop and restart
-/// Steam, and the resets touch only regenerable caches.
+/// Wine), and common problems, each a way to its fix. Every action keeps
+/// games and saves: the destructive-looking ones stop and restart Steam, and
+/// the resets touch only regenerable caches.
 struct RecoverySettings: View {
     let provisioner: Provisioner
     let compatibility: CompatibilityStore
@@ -21,16 +20,16 @@ struct RecoverySettings: View {
         case forceQuitSteam
         case restartWindows
         case clearShaderCache
-        case rebuildSteamEnvironment
+        case rebuildBottle
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .forceQuitSteam: "Force-quit Steam?"
+            case .forceQuitSteam: "Force Quit Steam?"
             case .restartWindows: "Restart Windows?"
             case .clearShaderCache: "Clear the shader cache?"
-            case .rebuildSteamEnvironment: "Rebuild the Steam environment?"
+            case .rebuildBottle: "Rebuild the bottle?"
             }
         }
 
@@ -39,105 +38,92 @@ struct RecoverySettings: View {
             case .forceQuitSteam:
                 "Steam closes at once and reopens clean. A running game keeps playing."
             case .restartWindows:
-                "Every Windows process in the bottle stops, Wine's server included, then "
+                "Every Windows process in the bottle stops, Wine\u{2019}s server included, then "
                     + "Steam reopens. Slower than restarting Steam alone."
             case .clearShaderCache:
                 "Steam stops, its shader cache is trashed, and it reopens and rebuilds "
                     + "the shaders. Your games and saves stay."
-            case .rebuildSteamEnvironment:
+            case .rebuildBottle:
                 "Steam stops, its installer runs over the bottle again, and the client "
-                    + "downloads itself fresh. Long — tens of minutes on a slow line. "
+                    + "downloads itself fresh. Long: tens of minutes on a slow line. "
                     + "Your games and saves stay."
             }
         }
 
         var confirmLabel: String {
             switch self {
-            case .forceQuitSteam: "Force-quit"
+            case .forceQuitSteam: "Force Quit Steam"
             case .restartWindows: "Restart Windows"
-            case .clearShaderCache: "Clear cache"
-            case .rebuildSteamEnvironment: "Rebuild"
+            case .clearShaderCache: "Clear Shader Cache"
+            case .rebuildBottle: "Rebuild Bottle"
             }
         }
     }
 
-    /// A problem as the person meeting it would put it, with the error text
-    /// they are likely to be looking at, and where its fix is.
+    /// A problem as the person meeting it would put it, what fixes it in one
+    /// line, and the row that does.
     struct KnownIssue: Identifiable {
         let id: String
         let symptom: String
-        /// What the game or Windows prints, when the problem has a wording.
-        var example: String?
-        /// Where the fix is, in one line.
         let fix: String
-        /// Why it happens and the fix in full, behind the row's (i).
-        var detail: String?
-
-        /// The (i), for a problem with more to say than its one line.
-        var help: SettingHelp? {
-            guard detail != nil || example != nil else { return nil }
-            return SettingHelp(
-                title: symptom,
-                summary: detail ?? fix,
-                entries: example.map { [.init(name: "What it looks like", text: $0)] } ?? [],
-            )
-        }
+        let target: SettingsAnchor
     }
 
     /// Only problems with a fix a person can reach from Settings.
     static let knownIssues: [KnownIssue] = [
         KnownIssue(
             id: "dll-missing-runtime",
-            symptom: "A game says a file is missing and will not start.",
-            example: "\u{201C}VCRUNTIME140.dll was not found\u{201D} · MSVCP140.dll · "
-                + "d3dx9_43.dll · XINPUT1_3.dll",
-            fix: "Install its runtime in Settings › Engine › Game dependencies.",
-            detail: "These files come with Windows runtimes that games expect to be there. Install "
-                + "Visual C++ runtime for VCRUNTIME and MSVCP, DirectX runtimes for d3dx9, xinput "
-                + "and xaudio, in Settings › Engine › Game dependencies.",
+            symptom: "A game says a file is missing and will not start",
+            fix: "Install the Visual C++ runtime, or the DirectX runtimes for d3dx9 and xinput.",
+            target: .engineDependencies,
         ),
         KnownIssue(
             id: "dll-own-copy",
-            symptom: "A mod, a fix or a loader is installed and the game ignores it.",
-            example: "ReShade · a widescreen fix · dinput8.dll · version.dll · winmm.dll · d3d9.dll",
-            fix: "Add a DLL override for its file in Settings › Games.",
-            detail: "Wine uses its own copy of a library it knows. Add a DLL override for that file "
-                + "in Settings › Games, set to Native, then built-in, so the game's copy wins.",
+            symptom: "A mod, a fix, or a loader is installed and the game ignores it",
+            fix: "Add a DLL override for its file to that game, set to Native, then built-in.",
+            target: .gamesSettings,
         ),
         KnownIssue(
             id: "d3dcompiler-missing",
-            symptom: "A game shows a black screen, or stops while its shaders compile.",
-            example: "d3dcompiler_47.dll · \u{201C}Failed to compile shader\u{201D}",
-            fix: "Reinstall the Direct3D shader compiler above.",
+            symptom: "A game shows a black screen, or stops while its shaders compile",
+            fix: "Install the Direct3D shader compiler again.",
+            target: .recoveryShaderCompiler,
         ),
         KnownIssue(
             id: "fonts-missing",
-            symptom: "A launcher shows empty buttons, or text is boxes.",
-            fix: "Install fonts in Settings › Engine › Game dependencies.",
-            detail: "Install Core fonts, and Japanese, Chinese & Korean fonts for a game in those "
-                + "languages, in Settings › Engine › Game dependencies.",
+            symptom: "A launcher shows empty buttons, or text is boxes",
+            fix: "Install Core fonts; Japanese, Chinese, and Korean games need their fonts too.",
+            target: .engineDependencies,
         ),
         KnownIssue(
             id: "wrong-renderer",
-            symptom: "A game starts and its picture is wrong, flickers or stays black.",
-            fix: "Choose another renderer for that game in Settings › Games.",
-            detail: "Choose another renderer for that game in Settings › Games. The (i) beside "
-                + "Game renderer in Settings › Graphics says what each one is for.",
+            symptom: "A game starts and its picture is wrong, flickers, or stays black",
+            fix: "Choose another renderer for that game.",
+            target: .gamesSettings,
         ),
         KnownIssue(
             id: "black-intro-video",
-            symptom: "A game shows a black screen where its intro video plays.",
-            fix: "Update the engine in Settings › Engine. Dormison plays these videos.",
+            symptom: "A game shows a black screen where its intro video plays",
+            fix: "Update the engine. Dormison plays these videos.",
+            target: .engineSelection,
         ),
         KnownIssue(
             id: "menus-freeze-27",
-            symptom: "Steam's menus freeze and the app looks stuck.",
-            fix: "Cancel stuck menus above. Steam keeps running behind a frozen menu.",
+            symptom: "Steam\u{2019}s menus freeze and the app looks stuck",
+            fix: "Dismiss the stuck menus. Steam keeps running behind a frozen menu.",
+            target: .recoveryCancelMenus,
         ),
         KnownIssue(
             id: "helper-wont-start",
-            symptom: "The menu bar says the background helper won't start.",
-            fix: "Repair the background helper above; approve it in Login Items if asked.",
+            symptom: "The menu bar says the background helper won\u{2019}t start",
+            fix: "Repair the helper, and approve it in Login Items if asked.",
+            target: .recoveryHelper,
+        ),
+        KnownIssue(
+            id: "something-else",
+            symptom: "Something else",
+            fix: "Save a diagnostics archive and send it with your report.",
+            target: .diagnosticsSave,
         ),
     ]
 
@@ -146,13 +132,20 @@ struct RecoverySettings: View {
     @State private var lastMenuResult: String?
 
     var body: some View {
-        Form {
+        SettingsForm(highlighted: highlighted) {
             steamSection
             helperSection
             bottleSection
-            knownIssuesSection
+            SettingsSection(title: "Common problems") {
+                ForEach(Self.knownIssues) { issue in
+                    SettingsJump(
+                        title: "\(InterfaceCopy.localized(issue.symptom))",
+                        caption: InterfaceCopy.localized(issue.fix),
+                        target: issue.target,
+                    )
+                }
+            }
         }
-        .formStyle(.grouped)
         .task { compatibility.refresh() }
         .confirmationDialog(
             pendingReset.map { InterfaceCopy.localized($0.title) } ?? "", isPresented: confirmingReset,
@@ -172,171 +165,93 @@ struct RecoverySettings: View {
     // MARK: - Steam
 
     private var steamSection: some View {
-        Section {
-            actionRow(
-                "Restart Steam",
-                detail: "The first thing to try when Steam acts up.",
-                button: "Restart", disabled: supervisor == nil,
-            ) { supervisor?.restartNow() }
-                .highlightable(.recoveryRestartSteam, highlighted: highlighted)
-            actionRow(
-                "Force-quit Steam",
-                detail: "For when a restart won't take. A running game keeps playing.",
-                button: "Force-quit", disabled: supervisor == nil,
-            ) { pendingReset = .forceQuitSteam }
-                .highlightable(.recoveryForceQuit, highlighted: highlighted)
-            actionRow(
-                "Cancel stuck menus",
-                detail: menuDetail, button: "Cancel", disabled: steam == nil,
+        SettingsSection(title: "Steam", footer: "Your games and saves stay.") {
+            SettingsAction(
+                title: "Steam", caption: String(localized: "The first thing to try when Steam acts up."),
             ) {
-                let open = steam?.cancelStuckMenus() ?? []
-                lastMenuResult = open.isEmpty
-                    ? "No menu was tracking."
-                    : String(localized: "Ended: \(open.joined(separator: ", ")).")
+                Button("Restart Steam") { supervisor?.restartNow() }
+                    .disabled(supervisor == nil)
+            }
+            .highlightable(.recoveryRestartSteam, highlighted: highlighted)
+            SettingsAction(
+                title: "Steam that won\u{2019}t restart",
+                caption: String(localized: "A running game keeps playing."),
+            ) {
+                Button("Force Quit Steam") { pendingReset = .forceQuitSteam }
+                    .disabled(supervisor == nil)
+            }
+            .highlightable(.recoveryForceQuit, highlighted: highlighted)
+            SettingsAction(
+                title: "Stuck Steam menus",
+                caption: lastMenuResult ?? String(localized: "Steam\u{2019}s menus can freeze on macOS 27."),
+            ) {
+                Button("Dismiss Menus") {
+                    let open = steam?.cancelStuckMenus() ?? []
+                    lastMenuResult = open.isEmpty
+                        ? String(localized: "No menu was tracking.")
+                        : String(localized: "Ended: \(open.joined(separator: ", ")).")
+                }
+                .disabled(steam == nil)
             }
             .highlightable(.recoveryCancelMenus, highlighted: highlighted)
-        } header: {
-            Text("Steam")
-        } footer: {
-            Text("Your games and saves stay.")
         }
-    }
-
-    private var menuDetail: String {
-        lastMenuResult
-            ?? "Steam's menus can freeze on macOS 27."
     }
 
     // MARK: - Background helper
 
     private var helperSection: some View {
-        Section {
-            SettingsRow {
-                helperActivity
-                Spacer()
-                Button("Repair") { repairHelper() }
+        SettingsSection(
+            title: "Background helper",
+            footer: "The helper keeps Steam supervised while Sevoflurane is closed.",
+        ) {
+            SettingsAction(
+                title: "Registration", caption: helper.caption, state: helper.state, isWorking: helper.isWorking,
+            ) {
+                Button("Repair Helper") { repairHelper() }
                     .disabled(helper.isWorking)
             }
             .highlightable(.recoveryHelper, highlighted: highlighted)
-        } header: {
-            Text("Background helper")
-        } footer: {
-            Text("The helper keeps Steam supervised even when this app is closed. Rebuilding it registers it fresh; approve it in Login Items if asked.")
         }
     }
 
-    @ViewBuilder private var helperActivity: some View {
-        switch helper {
-        case .idle:
-            Text("Repair the background helper")
-        case .working:
-            ProgressView().controlSize(.small)
-            Text("Rebuilding the background helper…")
-        case let .done(message):
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text(InterfaceCopy.localized(message))
-        case let .failed(message):
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text(InterfaceCopy.localized(message))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    // MARK: - Bottle & Wine
+    // MARK: - Bottle
 
     private var bottleSection: some View {
-        Section {
-            RepairRow(provisioner: provisioner, highlighted: highlighted)
+        SettingsSection(title: "Bottle", footer: "Your games and saves stay.") {
+            RepairRow(provisioner: provisioner)
                 .highlightable(.recoveryBottleRepair, highlighted: highlighted)
-            shaderCompilerRow
-            actionRow(
-                "Restart Windows",
-                detail: "For when restarting Steam has not helped.",
-                button: "Restart", disabled: supervisor == nil,
-            ) { pendingReset = .restartWindows }
-                .highlightable(.recoveryWineRestart, highlighted: highlighted)
-            actionRow(
-                "Clear the shader cache",
-                detail: "For a black screen or a stuck loading bar.",
-                button: "Clear", disabled: supervisor == nil,
-            ) { pendingReset = .clearShaderCache }
-                .highlightable(.recoveryClearShaderCache, highlighted: highlighted)
-            actionRow(
-                "Rebuild the Steam environment",
-                detail: rebuildDetail,
-                button: "Rebuild…", disabled: isRebuilding,
-            ) { pendingReset = .rebuildSteamEnvironment }
-                .highlightable(.recoveryRebuildSteam, highlighted: highlighted)
-            actionRow(
-                "Wine configuration",
-                detail: "winecfg: Windows version, drives, audio and DLL overrides.",
-                button: "Open…",
-            ) { compatibility.openWineConfiguration() }
-                .highlightable(.recoveryWinecfg, highlighted: highlighted)
-        } header: {
-            Text("Bottle & Wine")
-        } footer: {
-            Text("Repair reinstalls the Windows components Steam needs and leaves your games and saves alone.")
-        }
-    }
-
-    @ViewBuilder private var shaderCompilerRow: some View {
-        if let row = compatibility.rows.first(where: { $0.id == "d3dcompiler" }) {
-            ActionRow(
-                title: "Reinstall the Direct3D shader compiler",
-                caption: InterfaceCopy.localized(row.busy ? (row.phase ?? "working…") : shaderCompilerDetail(row)),
-                isWarning: row.error != nil && !row.busy,
+            if let row = compatibility.rows.first(where: { $0.id == "d3dcompiler" }) {
+                ShaderCompilerRow(row: row) { compatibility.install(row.id) }
+                    .highlightable(.recoveryShaderCompiler, highlighted: highlighted)
+            }
+            SettingsAction(
+                title: "Windows", caption: String(localized: "For when restarting Steam has not helped."),
             ) {
-                if row.busy {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Button(row.installed ? "Reinstall" : "Install") {
-                        compatibility.install(row.id)
-                    }
-                }
+                Button("Restart Windows") { pendingReset = .restartWindows }
+                    .disabled(supervisor == nil)
             }
-            .highlightable(.recoveryShaderCompiler, highlighted: highlighted)
-        }
-    }
-
-    private func shaderCompilerDetail(_ row: CompatibilityStore.DependencyRow) -> String {
-        if let error = row.error { return error }
-        return row.installed
-            ? "Installed. Reinstall it if the doctor still reports it missing."
-            : "Missing. A game that needs it will not start."
-    }
-
-    // MARK: - Known issues
-
-    private var knownIssuesSection: some View {
-        Section {
-            ForEach(Self.knownIssues) { issue in
-                HelpedRow(caption: InterfaceCopy.localized(issue.fix), help: issue.help) {
-                    Text(InterfaceCopy.localized(issue.symptom))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+            .highlightable(.recoveryWineRestart, highlighted: highlighted)
+            SettingsAction(
+                title: "Shader cache", caption: String(localized: "For a black screen or a stuck loading bar."),
+            ) {
+                Button("Clear Shader Cache") { pendingReset = .clearShaderCache }
+                    .disabled(supervisor == nil)
             }
-        } header: {
-            Text("Common problems")
-        } footer: {
-            Text("For other problems, save a diagnostics archive in Settings › Diagnostics.")
-        }
-    }
-
-    // MARK: - A reusable action row
-
-    /// A titled row with a one-line description and a trailing button.
-    private func actionRow(
-        _ title: String, detail: String, button: String, disabled: Bool = false,
-        action: @escaping () -> Void,
-    ) -> some View {
-        SettingsRow(caption: InterfaceCopy.localized(detail)) {
-            LabeledContent(InterfaceCopy.localized(title)) {
-                Button(InterfaceCopy.localized(button), action: action)
-                    .disabled(disabled)
+            .highlightable(.recoveryClearShaderCache, highlighted: highlighted)
+            SettingsAction(
+                title: "Steam client", caption: rebuildCaption, state: rebuildState, isWorking: isRebuilding,
+            ) {
+                Button("Rebuild Bottle…") { pendingReset = .rebuildBottle }
+                    .disabled(isRebuilding)
             }
+            .highlightable(.recoveryRebuildSteam, highlighted: highlighted)
+            SettingsAction(
+                title: "Wine configuration",
+                caption: String(localized: "winecfg: Windows version, drives, audio, and DLL overrides."),
+            ) {
+                Button("Open Wine Configuration") { compatibility.openWineConfiguration() }
+            }
+            .highlightable(.recoveryWinecfg, highlighted: highlighted)
         }
     }
 
@@ -347,15 +262,15 @@ struct RecoverySettings: View {
         case .forceQuitSteam: supervisor?.forceQuit(.steam)
         case .restartWindows: supervisor?.restartWindowsNow()
         case .clearShaderCache: supervisor?.clearShaderCache()
-        case .rebuildSteamEnvironment: rebuildSteamEnvironment()
+        case .rebuildBottle: rebuildBottle()
         }
     }
 
     /// Reinstalls the client over the bottle it already has: the installer
     /// must not run under a live Steam, so the client is stopped first and
     /// brought back when the stages finish.
-    private func rebuildSteamEnvironment() {
-        Task(name: "Rebuild the Steam environment") {
+    private func rebuildBottle() {
+        Task(name: "Rebuild the bottle") {
             await supervisor?.stopForControl()
             await provisioner.refreshDetection()
             await provisioner.provisionAndConfigure(rebuildingSteam: true)
@@ -367,12 +282,14 @@ struct RecoverySettings: View {
         if case .working = provisioner.activity { true } else { false }
     }
 
-    private var rebuildDetail: String {
+    private var rebuildCaption: String {
         if case let .working(phase) = provisioner.activity { return phase }
-        if case let .failed(reason) = provisioner.activity {
-            return String(localized: "The last attempt stopped: \(reason)")
-        }
-        return "For a damaged Steam client that Repair leaves alone."
+        return String(localized: "For a damaged Steam client that Repair leaves alone.")
+    }
+
+    private var rebuildState: SettingsRowState {
+        guard case let .failed(reason) = provisioner.activity else { return .normal }
+        return .failure(String(localized: "The last attempt stopped: \(reason)"))
     }
 
     private func repairHelper() {
@@ -407,5 +324,77 @@ struct RecoverySettings: View {
         var isWorking: Bool {
             if case .working = self { true } else { false }
         }
+
+        var caption: String {
+            switch self {
+            case .idle, .failed: String(localized: "Registers the helper fresh. Approve it in Login Items if asked.")
+            case .working: String(localized: "Rebuilding the background helper…")
+            case let .done(message): InterfaceCopy.localized(message)
+            }
+        }
+
+        var state: SettingsRowState {
+            if case let .failed(message) = self { .failure(InterfaceCopy.localized(message)) } else { .normal }
+        }
+    }
+}
+
+/// The Direct3D shader compiler: whether the bottle has it, and the button
+/// that installs it again.
+private struct ShaderCompilerRow: View {
+    let row: CompatibilityStore.DependencyRow
+    let install: () -> Void
+
+    var body: some View {
+        SettingsAction(title: "Direct3D shader compiler", caption: caption, state: state, isWorking: row.busy) {
+            Button("Install Shader Compiler", action: install)
+                .disabled(row.busy)
+        }
+    }
+
+    private var caption: String {
+        row.busy
+            ? InterfaceCopy.localized(row.phase ?? "working…")
+            : String(localized: "Installed. Install it again if a game still reports it missing.")
+    }
+
+    private var state: SettingsRowState {
+        if row.busy { return .normal }
+        if let error = row.error { return .failure(error) }
+        return row.installed
+            ? .normal : .warning(String(localized: "Missing. A game that needs it will not start."))
+    }
+}
+
+/// Repair: the provisioner's activity and the button that runs it again.
+struct RepairRow: View {
+    let provisioner: Provisioner
+
+    var body: some View {
+        SettingsAction(title: "Steam installation", caption: caption, state: state, isWorking: isWorking) {
+            if case .done = provisioner.activity {
+                SettingsStatus(.done, String(localized: "Ready"))
+            }
+            Button("Repair Steam") {
+                Task(name: "Repair the installation") {
+                    await provisioner.provisionAndConfigure()
+                }
+            }
+            .disabled(isWorking)
+        }
+        .task { await provisioner.refreshDetection() }
+    }
+
+    private var isWorking: Bool {
+        if case .working = provisioner.activity { true } else { false }
+    }
+
+    private var caption: String {
+        if case let .working(phase) = provisioner.activity { return phase }
+        return String(localized: "Reinstalls the Windows components Steam needs.")
+    }
+
+    private var state: SettingsRowState {
+        if case let .failed(reason) = provisioner.activity { .failure(reason) } else { .normal }
     }
 }
