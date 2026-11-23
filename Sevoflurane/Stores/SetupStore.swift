@@ -75,6 +75,14 @@ final class SetupStore {
         graphicsStore = step == .graphics ? makeGraphics?() : nil
     }
 
+    #if DEBUG
+        /// Puts the store on a copy of the app that carries an engine, for
+        /// the gallery: a simulated run looks for none.
+        func stage(bundledEngine: URL) {
+            self.bundledEngine = bundledEngine
+        }
+    #endif
+
     /// Finds the bundled engine and detects what the machine has.
     func detect() async {
         if !provisioner.isDryRun {

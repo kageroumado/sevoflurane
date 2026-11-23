@@ -76,7 +76,7 @@ struct SetupView: View {
         case .steam:
             SetupInstallStep(provisioner: provisioner, isAdoptingSteam: store.adoptsSteam)
         case .graphics:
-            SetupGraphicsStep(download: store.gptk, store: store.graphicsStore, isSimulated: provisioner.isDryRun)
+            SetupGraphicsStep(download: store.gptk, store: store.graphicsStore, isSimulated: graphicsIsSimulated)
         case .options:
             SetupOptionsStep(openAtLogin: $store.openAtLogin, installsCommand: $store.connectAgents)
         case .sharing:
@@ -165,7 +165,16 @@ struct SetupView: View {
     }
 
     private var wantsTallWindow: Bool {
-        store.step == .graphics && SetupGraphicsStep.hostsSignIn(store.gptk, isSimulated: provisioner.isDryRun)
+        store.step == .graphics && SetupGraphicsStep.hostsSignIn(store.gptk, isSimulated: graphicsIsSimulated)
+    }
+
+    /// Whether the graphics step stands Apple's page down: a simulated run,
+    /// except one whose download the gallery staged with a page of its own.
+    private var graphicsIsSimulated: Bool {
+        #if DEBUG
+            if store.gptk.isStaged { return false }
+        #endif
+        return provisioner.isDryRun
     }
 
     @discardableResult

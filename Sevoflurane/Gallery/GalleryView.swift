@@ -12,14 +12,15 @@
     struct GalleryView: View {
         var body: some View {
             ScrollView {
-                tiles
+                tiles(withWizardStates: true)
             }
             .frame(minWidth: 1200, minHeight: 900)
         }
 
         /// Every tile at full height, outside any scroll view: what the window
-        /// scrolls and ``GalleryExport`` writes.
-        var tiles: some View {
+        /// scrolls and ``GalleryExport`` writes. The export leaves out the
+        /// first-run assistant's further states, which it writes one to a file.
+        func tiles(withWizardStates: Bool) -> some View {
             VStack(alignment: .leading, spacing: Theme.Space.xl) {
                 Text(verbatim: "Sevoflurane UI Gallery")
                     .font(.system(.largeTitle, design: .rounded).weight(.bold))
@@ -29,6 +30,9 @@
                 EngineTiles()
                 ToolTiles()
                 WizardTiles()
+                if withWizardStates {
+                    WizardStateTiles()
+                }
             }
             .padding(Theme.Space.xl)
         }
@@ -258,16 +262,8 @@
             GallerySection("Menu bar popover") {
                 ForEach(Fixtures.popovers, id: \.label) { fixture in
                     GalleryTile(fixture.label) {
-                        MenuBarView(
-                            host: fixture.host,
-                            supervisor: fixture.supervisor,
-                            notifications: fixture.notifications,
-                            quickLaunch: Fixtures.quickLaunch,
-                            graphics: Fixtures.graphics,
-                            questions: Fixtures.questions,
-                        )
-                        .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
-                        .background(.background, in: Theme.cardShape)
+                        fixture.view
+                            .background(.background, in: Theme.cardShape)
                     }
                 }
             }
@@ -442,6 +438,24 @@
         }
     }
 
+    /// The first-run assistant in every state past a step's first look
+    /// (``WizardState``), each walked to its state as its tile appears.
+    private struct WizardStateTiles: View {
+        var body: some View {
+            GallerySection("First-run assistant — every other state", minimum: 700) {
+                ForEach(WizardState.all) { state in
+                    GalleryTile(state.id) {
+                        state.view
+                            .frame(height: state.height)
+                            .background(.background, in: Theme.cardShape)
+                            .clipShape(Theme.cardShape)
+                            .task { await state.arrange() }
+                    }
+                }
+            }
+        }
+    }
+
     /// A titled grid of tiles.
     private struct GallerySection<Content: View>: View {
         let title: String
@@ -526,7 +540,33 @@
             let supervisor: ClientSupervisor
             /// Nothing else in the app draws the notification permission card.
             var notifications: SteamNotifications = .preview()
+            /// The first-run assistant, for the popover that leads back to it.
+            var setup: SetupWindow?
+
+            /// The popover at its own width.
+            var view: some View {
+                MenuBarView(
+                    host: host,
+                    supervisor: supervisor,
+                    notifications: notifications,
+                    quickLaunch: Fixtures.quickLaunch,
+                    graphics: Fixtures.graphics,
+                    questions: Fixtures.questions,
+                    setup: setup,
+                )
+                .frame(width: Theme.popoverWidth + Theme.Space.md * 2)
+            }
         }
+
+        /// The popover while the first-run assistant is open or set aside.
+        static let setupUnfinished: Popover = {
+            let setup = SetupWindow()
+            setup.stageUnfinished()
+            return Popover(
+                label: "Setup unfinished", host: .preview(),
+                supervisor: ClientSupervisor(previewHealth: .starting), setup: setup,
+            )
+        }()
 
         struct Pane {
             let label: String
@@ -596,6 +636,7 @@
         /// observable object on every evaluation, and the gallery would rebuild
         /// itself forever.
         static let popovers: [Popover] = [
+            setupUnfinished,
             Popover(
                 label: "Healthy",
                 host: .preview(games: games),

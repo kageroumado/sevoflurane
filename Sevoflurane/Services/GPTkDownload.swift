@@ -118,6 +118,29 @@ final class GPTkDownload: NSObject {
         autoPhase = .manual
     }
 
+    #if DEBUG
+        /// Whether the gallery staged this download: its page is then a
+        /// stand-in that loads nothing, and no folder is read.
+        @ObservationIgnored private(set) var isStaged = false
+
+        /// Puts the download where the gallery draws it, with Apple's page
+        /// counted as loaded and, on the browser route, the folders as watched.
+        func stage(
+            route: Route = .here, autoPhase: AutoPhase = .idle, items: [Item] = [],
+            pickedVersions: [String] = [], manualCandidate: String? = nil, stoppedEnrollment: Bool = false,
+        ) {
+            isStaged = true
+            pageLoaded = true
+            self.route = route
+            self.autoPhase = autoPhase
+            self.items = items
+            self.pickedVersions = pickedVersions
+            self.manualCandidate = manualCandidate
+            self.stoppedEnrollment = stoppedEnrollment
+            if route == .browser { folderWatch.stageWatching() }
+        }
+    #endif
+
     private var nextID = 0
     private var startedDownloads: Set<String> = []
     private var destinations: [ObjectIdentifier: URL] = [:]

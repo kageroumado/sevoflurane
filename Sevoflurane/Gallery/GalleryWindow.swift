@@ -1,5 +1,6 @@
 #if DEBUG
     import AppKit
+    import Propofol
     import SwiftUI
 
     /// The window ``GalleryView`` lives in.
@@ -64,7 +65,7 @@
         }
 
         static func run(to directory: URL) {
-            let host = NSHostingView(rootView: GalleryView().tiles.frame(width: width))
+            let host = NSHostingView(rootView: GalleryView().tiles(withWizardStates: false).frame(width: width))
             let window = NSWindow(
                 contentRect: NSRect(x: -20000, y: -20000, width: width, height: stripHeight),
                 styleMask: [.borderless], backing: .buffered, defer: false,
@@ -152,16 +153,37 @@
         }
 
         /// The first-run assistant at its window's size: each step as
-        /// `setup-<step>.png` on a machine that reaches it.
+        /// `setup-<step>.png` on a machine that reaches it, each further state
+        /// of a step as `setup-<step>-<state>.png` (``WizardState``), and the
+        /// popover that leads back to an unfinished setup as
+        /// `setup-popover-unfinished.png`.
         private static func writeWizard(to directory: URL, appearance: NSAppearance?) async -> Int {
-            let screens: [(name: String, store: SetupStore)] =
-                Fixtures.wizardSteps.map { ("setup-\($0.step.rawValue)", $0.store) }
+            for state in WizardState.all {
+                await state.arrange()
+            }
+            let width = SetupMetrics.windowSize.width
+            // A height of `nil` is the content's own.
+            var screens: [(name: String, view: AnyView, width: CGFloat, height: CGFloat?)] =
+                Fixtures.wizardSteps.map { step in
+                    (
+                        "setup-\(step.step.rawValue)", AnyView(SetupView(store: step.store, onFinished: {})),
+                        width, SetupMetrics.windowSize.height,
+                    )
+                }
+            screens += WizardState.all.map { ("setup-\($0.id)", AnyView($0.view), width, $0.height) }
+            screens.append((
+                "setup-popover-unfinished", AnyView(Fixtures.setupUnfinished.view),
+                Theme.popoverWidth + Theme.Space.md * 2, nil,
+            ))
             let hosts = screens.map { screen in
-                let host = NSHostingView(rootView: SetupView(store: screen.store, onFinished: {})
-                    .frame(width: SetupMetrics.windowSize.width, height: SetupMetrics.windowSize.height)
+                let host = NSHostingView(rootView: screen.view
+                    .frame(width: screen.width, height: screen.height)
                     .background(Color(nsColor: .windowBackgroundColor)))
                 let window = NSWindow(
-                    contentRect: NSRect(origin: CGPoint(x: -20000, y: -20000), size: SetupMetrics.windowSize),
+                    contentRect: NSRect(
+                        origin: CGPoint(x: -20000, y: -20000),
+                        size: CGSize(width: screen.width, height: screen.height ?? probeHeight),
+                    ),
                     styleMask: [.borderless], backing: .buffered, defer: false,
                 )
                 window.contentView = host
@@ -170,9 +192,12 @@
                     window.backgroundColor = .windowBackgroundColor
                 }
                 window.orderBack(nil)
-                return (name: screen.name, host: host, window: window)
+                return (name: screen.name, host: host, window: window, fitsContent: screen.height == nil)
             }
             try? await Task.sleep(for: settleDelay)
+            for entry in hosts where entry.fitsContent {
+                entry.window.setContentSize(entry.host.fittingSize)
+            }
             for entry in hosts {
                 entry.host.layoutSubtreeIfNeeded()
                 let rect = entry.host.bounds

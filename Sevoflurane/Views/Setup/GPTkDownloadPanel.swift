@@ -52,6 +52,10 @@ struct GPTkDownloadPanel: View {
     /// The folders are watched only while their route is on screen, and
     /// never in a simulated run, which has no engine to install into.
     private func watch(_ route: GPTkDownload.Route) {
+        #if DEBUG
+            // A staged download reads as watching already and reads no folder.
+            if download.isStaged { return }
+        #endif
         if route == .browser, !isSimulated {
             download.folderWatch.start()
         } else {
@@ -137,8 +141,21 @@ struct GPTkDownloadPanel: View {
         return Text("Click Download on \u{201C}Evaluation environment for Windows games 4.0 beta 2\u{201D} or newer. It installs here when its download ends.")
     }
 
+    /// Apple's page, or in the gallery the stand-in for it.
+    @ViewBuilder private var page: some View {
+        #if DEBUG
+            if download.isStaged {
+                GPTkStagedPage()
+            } else {
+                GPTkWebViewRepresentable(webView: download.webView)
+            }
+        #else
+            GPTkWebViewRepresentable(webView: download.webView)
+        #endif
+    }
+
     private var webView: some View {
-        GPTkWebViewRepresentable(webView: download.webView)
+        page
             .overlay {
                 if !download.pageLoaded {
                     ProgressView().controlSize(.large)
@@ -260,6 +277,25 @@ private struct GPTkWebViewRepresentable: NSViewRepresentable {
     func makeNSView(context _: Context) -> WKWebView { webView }
     func updateNSView(_: WKWebView, context _: Context) {}
 }
+
+#if DEBUG
+    /// Fills the room Apple's page takes, for a download the gallery staged:
+    /// the live page needs the network and an Apple Account.
+    private struct GPTkStagedPage: View {
+        var body: some View {
+            // The label sits at the top, clear of the covers drawn over the
+            // page's middle: a material lets it show through.
+            ZStack(alignment: .top) {
+                Color(nsColor: .textBackgroundColor)
+                Text(verbatim: "Apple’s page: developer.apple.com/download")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+#endif
 
 /// The route through the user's own browser: the page opens there, and the
 /// folders it saves into are watched, visibly, until the image lands.

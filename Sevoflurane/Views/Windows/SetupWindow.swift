@@ -72,6 +72,14 @@ final class SetupWindow {
         )
     }
 
+    #if DEBUG
+        /// Reads as a setup under way with no window behind it, so the gallery
+        /// can draw the popover that leads back to one.
+        func stageUnfinished() {
+            isUnfinished = true
+        }
+    #endif
+
     /// Brings the wizard back; answers whether there was one.
     @discardableResult
     func show() -> Bool {

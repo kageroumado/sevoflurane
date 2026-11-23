@@ -148,6 +148,32 @@
         /// Bottles whose boot left no 32-bit system DLLs; the next one
         /// created is complete.
         var incompleteBottles: Set<String> = []
+        /// Whether a licensed CrossOver turns up on the fourth check of a
+        /// machine without a usable one. Off, the machine stays as it began.
+        var crossOverAppearsOnRecheck = true
+        /// The action a run stops in and stays, so the gallery can draw the
+        /// assistant at that moment.
+        var hold: Hold?
+        /// What Rosetta's installer prints as it fails; `nil` installs it.
+        var rosettaFailure: String?
+        /// What the engine install fails with; `nil` installs it.
+        var engineFailure: String?
+        /// What fetching Steam's installer throws; `nil` fetches it.
+        var installerDownloadFailure: (any Error)?
+
+        /// An action of the live environment a simulated run can stop in.
+        enum Hold: Equatable {
+            case rosetta
+            /// The engine's download, this far through.
+            case engineDownload(fraction: Double)
+            case bottleCreation
+            case steamInstaller
+            case clientUpdate
+            case dependency
+        }
+
+        /// The size the manifest declares for a Dormison release, in megabytes.
+        private static let engineMegabytes = 230
 
         init(
             scenario: SetupScenario,
@@ -170,7 +196,7 @@
         func detect() async -> SetupDetection {
             detectCount += 1
             // From the fourth check on, a licensed CrossOver appears.
-            if state.usableCrossOver == nil, detectCount >= 4 {
+            if crossOverAppearsOnRecheck, state.usableCrossOver == nil, detectCount >= 4 {
                 state = SetupDetection(
                     rosetta: state.rosetta,
                     crossover: SetupScenario.licensedCrossOver,
@@ -199,7 +225,9 @@
 
         func installRosetta() async -> SetupCommandOutcome {
             log("would run: softwareupdate --install-rosetta --agree-to-license")
+            await stay(in: .rosetta)
             await pause()
+            if let rosettaFailure { return .failure(rosettaFailure) }
             state = SetupDetection(
                 rosetta: true, crossover: state.crossover, bottles: state.bottles,
                 managedEngineVersions: state.managedEngineVersions,
@@ -212,19 +240,27 @@
             progress: @escaping @Sendable (String, Double?) -> Void,
         ) async -> SetupCommandOutcome {
             let version: String
+            // The live download's own phase, so the page reads as it does there.
+            let downloading = String(localized: "Downloading the engine (~\(Self.engineMegabytes) MB)…")
             if let tarball {
                 log("would install the managed engine from \(tarball.path)")
                 version = EngineInstaller.versionName(of: tarball)
                 progress("Installing…", nil)
                 await pause()
+            } else if case let .engineDownload(fraction) = hold {
+                log("would download the managed engine the manifest names, and stays \(fraction) of the way through")
+                progress(downloading, fraction)
+                await stayForever()
+                return .failure("the held download was cancelled")
             } else {
                 log("would download the managed engine the manifest names")
                 version = "dry-run-engine"
                 for step in 1 ... 4 {
-                    progress("Downloading the engine…", Double(step) / 4)
+                    progress(downloading, Double(step) / 4)
                     await pause()
                 }
             }
+            if let engineFailure { return .failure(engineFailure) }
             state = SetupDetection(
                 rosetta: state.rosetta,
                 crossover: state.crossover,
@@ -236,6 +272,7 @@
 
         func createBottle(named name: String) async -> SetupCommandOutcome {
             log("would run: cxbottle --bottle \(name) --create --template win10_64")
+            await stay(in: .bottleCreation)
             await pause()
             state = SetupDetection(
                 rosetta: state.rosetta,
@@ -254,9 +291,11 @@
             log("would download SteamSetup.exe from the Steam CDN "
                 + "into Bottles/\(name)/drive_c/")
             await pause()
+            if let installerDownloadFailure { throw installerDownloadFailure }
         }
 
         func runSteamInstaller(inBottle name: String) async -> SetupCommandOutcome {
+            await stay(in: .steamInstaller)
             guard installerFailures == 0 else {
                 if installerFailures != .max { installerFailures -= 1 }
                 log("simulating installer failure: wine --bottle \(name) "
@@ -298,6 +337,7 @@
         func updateSteamClient(inBottle name: String) async {
             log("would run: wine --bottle \(name) steam.exe -forcesteamupdate "
                 + "-forcepackagedownload -exitsteam (the long download)")
+            await stay(in: .clientUpdate)
             await pause()
             state = SetupDetection(
                 rosetta: state.rosetta,
@@ -337,6 +377,7 @@
         func installDependency(_ dependency: BottleDependencies.Dependency) async -> SetupCommandOutcome {
             dependencyInstalls.append(dependency.id)
             log("would install \(dependency.name) in \(bottleName)")
+            await stay(in: .dependency)
             await pause()
             if failingDependencies.contains(dependency.id) {
                 return .failure("\(dependency.name) refused to install")
@@ -362,5 +403,20 @@
         private func pause() async {
             try? await Task.sleep(for: stepDelay)
         }
+
+        /// Stops the run in `action` when that is the one it holds.
+        private func stay(in action: Hold) async {
+            guard hold == action else { return }
+            log("staying in \(action) for the gallery")
+            await stayForever()
+        }
+
+        /// Sleeps until the run's task is cancelled or the process ends.
+        private func stayForever() async {
+            try? await Task.sleep(for: .seconds(Self.foreverSeconds))
+        }
+
+        /// A year: longer than any gallery stays open.
+        private static let foreverSeconds = 365 * 86_400
     }
 #endif

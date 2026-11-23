@@ -66,6 +66,13 @@ final class GPTkFolderWatch {
         isWatching = false
     }
 
+    #if DEBUG
+        /// Reads as watching with no loop behind it, for the gallery.
+        func stageWatching() {
+            isWatching = true
+        }
+    #endif
+
     private func persist() {
         let added = folders.filter(isRemovable).map(\.path)
         Preferences.shared.set(added, forKey: Self.foldersKey)
