@@ -42,7 +42,7 @@ struct RunReportCard: View {
     }
 
     static let sharingOffHint: LocalizedStringKey =
-        "Turn on Share run statistics in Settings \u{203A} General \u{203A} Community to send a report about this run."
+        "Turn on Share run statistics in Settings \u{203A} General \u{203A} Privacy to tell other Mac players how it ran."
 }
 
 /// The verdict, the note with its counter, and the configuration as chips.

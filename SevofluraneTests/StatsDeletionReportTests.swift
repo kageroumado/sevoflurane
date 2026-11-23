@@ -14,7 +14,7 @@ struct StatsDeletionReportTests {
         deleted every run install m5a5fa shared; this Mac's key and registration are gone
         2 queued runs dropped unsent
         sharing is still on: the next run shared registers a new, unrelated install \
-        (Settings › General › Community turns it off)
+        (Settings › General › Privacy turns it off)
         """)
         #expect(report.json as NSDictionary == [
             "result": "deleted", "install": "m5a5fa", "sharing": "on", "dropped_queued": 2,

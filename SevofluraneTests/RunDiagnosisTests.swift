@@ -132,7 +132,7 @@ struct RunDiagnosisTests {
         let record = Self.record(exit: Self.crash, lasting: 2) { $0.missingDLL = "MSVCP140.dll" }
         let finding = try #require(RunDiagnosis.finding(.missingLibrary, for: record))
         #expect(finding.sentence == "Totally Accurate Battle Simulator could not start without MSVCP140.dll.")
-        #expect(finding.evidence.hasPrefix("MSVCP140.dll is part of "))
+        #expect(finding.evidence.hasSuffix(" includes MSVCP140.dll."))
         guard case let .install(dependency, dll, label) = finding.action else {
             Issue.record("no install action: \(String(describing: finding.action))")
             return
@@ -340,7 +340,7 @@ struct RunDiagnosisTests {
         "%@ failed to load, and the game drew nothing.",
         "%@ could not start without %@.",
         "No package Sevoflurane installs carries %@.",
-        "%@ is part of %@.",
+        "%@ includes %@.",
         "Install (%@)",
         "Install",
         "%@ shows a blank picture where a video should play.",

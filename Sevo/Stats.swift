@@ -8,14 +8,14 @@ struct StatsCommand: ParsableCommand {
         commandName: "stats",
         abstract: "What this Mac shares with the community game database.",
         discussion: """
-        With sharing on (Settings › General › Community), every game run that drew a frame or \
+        With sharing on (Settings › General › Privacy), every game run that drew a frame or \
         lasted 20 seconds goes to the public Sevoflurane game database after it closes: the \
         appid, executable name, engine, renderer, settings, resolution, frame rates, and the \
         Mac's model, chip, GPU cores and memory tier. Requests are signed by a key in this Mac's \
         Secure Enclave; the install id is derived from that key and names nothing else.
         
         Local state lives in ~/Library/Application Support/Sevoflurane/Stats. `sevo stats \
-        delete` takes back everything this Mac shared, as Settings › General › Community › \
+        delete` takes back everything this Mac shared, as Settings › General › Privacy › \
         Delete What I Shared does.
         """,
         subcommands: [Status.self, Preview.self, Reports.self, Delete.self],
@@ -119,7 +119,7 @@ struct StatsCommand: ParsableCommand {
             abstract: "Delete every run this Mac shared from the community database. Cannot be undone.",
             discussion: """
             Sends the install's signed request to delete it, then drops this Mac's key, \
-            registration and unsent runs, as Settings › General › Community › Delete What I \
+            registration and unsent runs, as Settings › General › Privacy › Delete What I \
             Shared does. The sharing setting is left as it is: while it is on, the next run \
             shared registers a new, unrelated install. A refused or unsent request changes \
             nothing here and exits 1.
@@ -155,7 +155,7 @@ struct ReportCommand: AsyncParsableCommand {
         record; the note is the one thing typed, and it is public — plain text, at most 600 \
         characters, no paths or e-mail addresses.
         
-        Only with sharing on (Settings › General › Community). The report is queued beside the \
+        Only with sharing on (Settings › General › Privacy). The report is queued beside the \
         shared runs and sent at once when this Mac is registered with the database; otherwise the \
         app sends it after its next shared run registers.
         """,
@@ -175,7 +175,7 @@ struct ReportCommand: AsyncParsableCommand {
             throw SevoExit.badInvocation
         }
         guard Preferences.sharesRunStats == true else {
-            Sevo.printError("sharing is off; turn it on in Settings › General › Community to send reports")
+            Sevo.printError("sharing is off; turn it on in Settings › General › Privacy to send reports")
             throw SevoExit.failed
         }
         if let problem = SharedReport.noteProblem(note, verdict: verdict) {

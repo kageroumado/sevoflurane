@@ -12019,12 +12019,12 @@
         }
       }
     },
-    "Turn on Share run statistics in Settings › General › Community to send a report about this run.": {
+    "Turn on Share run statistics in Settings › General › Privacy to tell other Mac players how it ran.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请在“设置 › 通用 › 社区”中开启“共享运行统计数据”，以发送此次运行的报告。"
+            "value": "请在“设置 › 通用 › 隐私”中开启“共享运行统计数据”，告诉其他 Mac 玩家这次运行的情况。"
           }
         }
       }
@@ -13533,13 +13533,13 @@
         }
       }
     },
-    "%@ is part of %@.": {
+    "%@ includes %@.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ 包含在 %2$@ 中。"
+            "value": "%1$@ 包含 %2$@。"
           }
         }
       }

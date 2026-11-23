@@ -108,7 +108,7 @@ redaction:
 
 ## The community game database
 
-With sharing on (Settings › General › Community), every run that drew a frame
+With sharing on (Settings › General › Privacy), every run that drew a frame
 or lasted 20 s is sent to the public Sevoflurane game database after it
 closes: appid, executable name, engine, renderer, settings, resolution, frame
 rates, and the Mac's model, chip, GPU cores and memory tier. Requests are

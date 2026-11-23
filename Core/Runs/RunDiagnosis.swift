@@ -258,7 +258,7 @@ nonisolated enum RunDiagnosis {
         let size = BottleDependencies.catalog.first { $0.id == repair.dependency }?.download
         return make(
             .missingLibrary, record,
-            evidence: String(localized: "\(dll) is part of \(repair.packageName)."),
+            evidence: String(localized: "\(repair.packageName) includes \(dll)."),
             action: .install(
                 dependency: repair.dependency, dll: repair.dll,
                 label: size.map { String(localized: "Install (\($0))") } ?? String(localized: "Install"),

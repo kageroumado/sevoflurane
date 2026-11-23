@@ -99,7 +99,7 @@ nonisolated struct StatsDeletionReport: Equatable {
         }
         if succeeded, sharing == true {
             lines.append("sharing is still on: the next run shared registers a new, unrelated install "
-                + "(Settings › General › Community turns it off)")
+                + "(Settings › General › Privacy turns it off)")
         }
         return lines.joined(separator: "\n")
     }
