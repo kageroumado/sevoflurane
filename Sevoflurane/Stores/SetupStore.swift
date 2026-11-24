@@ -108,9 +108,16 @@ final class SetupStore {
         screen = resuming ? .progress : .welcome
         let environment = provisioner.environment
         // A stored engine choice with no assistant on record is an
-        // installation an earlier version set up.
-        let hasBeenSetUp = environment.assistantHasFinished
-            || (environment.storedEngineIsManaged != nil && !environment.assistantInProgress)
+        // installation an earlier version set up. An assistant that is
+        // reopened answers as it did when it first opened.
+        let hasBeenSetUp: Bool
+        if environment.assistantInProgress, let began = environment.assistantBeganOnSetUpMac {
+            hasBeenSetUp = began
+        } else {
+            hasBeenSetUp = environment.assistantHasFinished
+                || (environment.storedEngineIsManaged != nil && !environment.assistantInProgress)
+            environment.assistantBeganOnSetUpMac = hasBeenSetUp
+        }
         opensAtLogin = SetupFlow.opensAtLoginByDefault(
             isRegistered: provisioner.openAtLogin, hasBeenSetUp: hasBeenSetUp,
         )
@@ -422,6 +429,7 @@ final class SetupStore {
             provisioner.setOpenAtLogin(opensAtLogin)
         }
         environment.assistantInProgress = false
+        environment.assistantBeganOnSetUpMac = nil
         environment.assistantHasFinished = true
     }
 

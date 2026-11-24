@@ -139,6 +139,7 @@
         /// The fixture's answer to the sharing question.
         var sharesRunStats: Bool?
         var assistantInProgress = false
+        var assistantBeganOnSetUpMac: Bool?
         var assistantHasFinished = false
         /// Whether the fixture has a Steam running in the folder it drives.
         var simulatesRunningSteam = false

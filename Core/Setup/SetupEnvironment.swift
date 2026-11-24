@@ -126,6 +126,12 @@ protocol SetupEnvironment: AnyObject {
     /// when one opens and cleared by its last page, so a Mac with Steam
     /// installed and nothing stored reads as finished.
     var assistantInProgress: Bool { get set }
+
+    /// Whether the assistant now in progress began on a Mac that had been
+    /// set up before; `nil` while none is in progress. Kept from its first
+    /// opening, because the assistant stores an engine choice on its way and
+    /// a reopened one would otherwise take its own choice for an earlier setup.
+    var assistantBeganOnSetUpMac: Bool? { get set }
 }
 
 extension SetupEnvironment {
@@ -543,6 +549,19 @@ final class LiveSetupEnvironment: SetupEnvironment {
     }
 
     private static let assistantInProgressKey = "setupAssistantInProgress"
+
+    var assistantBeganOnSetUpMac: Bool? {
+        get { Preferences.app.object(forKey: Self.assistantBeganOnSetUpMacKey) as? Bool }
+        set {
+            if let newValue {
+                Preferences.app.set(newValue, forKey: Self.assistantBeganOnSetUpMacKey)
+            } else {
+                Preferences.app.removeObject(forKey: Self.assistantBeganOnSetUpMacKey)
+            }
+        }
+    }
+
+    private static let assistantBeganOnSetUpMacKey = "setupAssistantBeganOnSetUpMac"
 
     var assistantHasFinished: Bool {
         get { Preferences.app.bool(forKey: Self.assistantHasFinishedKey) }

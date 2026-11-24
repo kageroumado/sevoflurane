@@ -322,6 +322,34 @@ struct SetupStoreTests {
     }
 
     @Test
+    func `a reopened assistant keeps the login item's answer from its first opening`() {
+        // Quit midway on an installation an earlier version set up: the
+        // assistant has stored an engine choice of its own by now.
+        let existing = makeRig(.freshMachine, detection: Self.plainMac, resuming: true) {
+            $0.storedEngineIsManaged = true
+            $0.assistantInProgress = true
+            $0.assistantBeganOnSetUpMac = true
+            try? $0.setOpenAtLogin(false)
+        }
+        #expect(!existing.store.opensAtLogin)
+
+        // Quit midway on a Mac nobody had set up.
+        let fresh = makeRig(.freshMachine, detection: Self.plainMac, resuming: true) {
+            $0.storedEngineIsManaged = true
+            $0.assistantInProgress = true
+            $0.assistantBeganOnSetUpMac = false
+            try? $0.setOpenAtLogin(false)
+        }
+        #expect(fresh.store.opensAtLogin)
+
+        // The first opening records which of the two it was.
+        let first = makeRig(.freshMachine, detection: Self.plainMac) { $0.storedEngineIsManaged = true }
+        #expect(first.environment.assistantBeganOnSetUpMac == true)
+        first.store.finish()
+        #expect(first.environment.assistantBeganOnSetUpMac == nil)
+    }
+
+    @Test
     func `the toolkit is offered only to the built-in engine without one`() async {
         let withToolkit = makeRig(.freshMachine, detection: Self.plainMac, toolkitInstalled: true)
         await withToolkit.store.prepare()
