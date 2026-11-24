@@ -32,6 +32,7 @@ nonisolated extension SteamSurface {
         case setShortcutName = "SteamClient.Apps.SetShortcutName"
         case setShortcutStartDir = "SteamClient.Apps.SetShortcutStartDir"
         case specifyCompatTool = "SteamClient.Apps.SpecifyCompatTool"
+        case subscribeWorkshopItem = "SteamClient.Apps.SubscribeWorkshopItem"
         case terminateApp = "SteamClient.Apps.TerminateApp"
         case verifyApp = "SteamClient.Apps.VerifyApp"
         // Browser
@@ -158,6 +159,8 @@ nonisolated extension SteamSurface.Call {
             Facts(passes: 2, use: "a library shortcut's working folder")
         case .specifyCompatTool:
             Facts(passes: 2, steamCalls: false, use: "mapping a game to its macOS or Windows build")
+        case .subscribeWorkshopItem:
+            Facts(passes: 3, use: "subscribing to a companion's Workshop item its partner app asks for")
         case .terminateApp:
             Facts(passes: 2, use: "stopping a game")
         case .verifyApp:

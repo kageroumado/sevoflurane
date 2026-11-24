@@ -2,16 +2,21 @@ import AppKit
 
 extension AppDelegate {
     /// `steam://` links, `sevoflurane://play` and `sevoflurane://settings` from
-    /// a game's Dock tile (CFBundleURLTypes), and Windows executables opened
-    /// from Finder (CFBundleDocumentTypes).
+    /// a game's Dock tile, `sevoflurane://workshop/subscribe` from a companion's
+    /// partner app (CFBundleURLTypes), and Windows executables opened from
+    /// Finder (CFBundleDocumentTypes).
     ///
-    /// A link brings Steam's window up first so the routed page has somewhere
-    /// to land; an executable opens the adoption panel.
+    /// A `steam://` link brings Steam's window up first so the routed page has
+    /// somewhere to land; an executable opens the adoption panel.
     func application(_: NSApplication, open urls: [URL]) {
         let programs = urls.filter(\.isFileURL)
         let links = urls.filter { $0.scheme?.lowercased() == "steam" }
         for url in urls where url.scheme?.lowercased() == "sevoflurane" {
-            playFromDock(url)
+            if url.host()?.lowercased() == "workshop" {
+                WorkshopSubscription.take(url, sender: AppleEventSender.current())
+            } else {
+                playFromDock(url)
+            }
         }
         // Steam is held behind an unfinished setup, so the assistant comes up
         // instead.
