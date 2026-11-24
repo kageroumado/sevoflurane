@@ -59,8 +59,13 @@ nonisolated struct GameCompatRecord: Codable, Sendable, Equatable {
         /// Runs that drew a frame, over the judged runs plus the left-out
         /// ones that drew.
         var reachedFrame: Double? = nil
-        /// Judged runs played past five minutes and ended by the player.
+        /// Runs played past five minutes and ended by the player, over the
+        /// settled runs where the database counts them, else over the judged.
         var played: Double? = nil
+        /// The judged runs that lasted or failed: one the player closed early
+        /// says nothing either way and is left out. `nil` from a database
+        /// that does not count them.
+        var settled: Int? = nil
         /// Judged runs that crashed.
         var crashed: Double? = nil
 
@@ -473,12 +478,13 @@ nonisolated enum GameCompatVerdict {
         let one = community.installs == 1
         let tally = "\(runs(community.judged)) on \(macs(community.installs))"
         let typical = one ? "" : " on a typical Mac"
-        /// The judged runs a share stands for, when it is one Mac's.
+        // The judged runs a share stands for, when it is one Mac's.
         func count(_ share: Double?) -> Int? {
             guard one, let share else { return nil }
             return Int((share * Double(community.judged)).rounded())
         }
         let played = "played past five minutes and ended by the player"
+        let early = "not counting ones closed early"
         let finding: String? = switch community.verdict {
         case "unplayable", "menu":
             // A run count only when none was left out (see `reachedFrame`).
@@ -490,7 +496,14 @@ nonisolated enum GameCompatVerdict {
                 nil
             }
         case "runs":
-            if let share = community.played, share < 0.5 {
+            if let share = community.played, share < 0.5, let settled = community.settled {
+                if one {
+                    "it starts, but \(settled - Int((share * Double(settled)).rounded())) of \(runs(settled)) on "
+                        + "\(macs(community.installs)) failed, \(early)"
+                } else {
+                    "it starts, but more than half the runs\(typical) failed, \(early), across \(tally)"
+                }
+            } else if let share = community.played, share < 0.5 {
                 if let kept = count(share) {
                     kept == 0 ? "it starts, but none of \(tally) was \(played)"
                         : "it starts, but only \(kept) of \(tally) \(kept == 1 ? "was" : "were") \(played)"
@@ -709,13 +722,14 @@ nonisolated enum GameCompatSources {
             let reached_frame: Double?
             let played: Double?
             let crashed: Double?
+            let settled: Int?
         }
         guard let summary = try? JSONDecoder().decode(Summary.self, from: data) else { return nil }
         return GameCompatRecord.Community(
             verdict: summary.verdict, runs: summary.runs, installs: summary.installs,
             engine: summary.engine, medianFPS: summary.fps?.median_avg, pageURL: summary.url,
             leftOut: summary.left_out ?? 0, reachedFrame: summary.reached_frame,
-            played: summary.played, crashed: summary.crashed,
+            played: summary.played, settled: summary.settled, crashed: summary.crashed,
         )
     }
 

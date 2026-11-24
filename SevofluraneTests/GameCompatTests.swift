@@ -31,12 +31,12 @@ struct GameCompatTests {
 
     private func community(
         _ verdict: String, runs: Int = 12, installs: Int = 4, leftOut: Int = 0,
-        reachedFrame: Double? = nil, played: Double? = nil, crashed: Double? = nil,
+        reachedFrame: Double? = nil, played: Double? = nil, crashed: Double? = nil, settled: Int? = nil,
     ) -> GameCompatRecord.Community {
         GameCompatRecord.Community(
             verdict: verdict, runs: runs, installs: installs, engine: "dormison-b1", medianFPS: 58,
             pageURL: URL(string: "https://kagerou.glass/sevoflurane/games/1-x")!,
-            leftOut: leftOut, reachedFrame: reachedFrame, played: played, crashed: crashed,
+            leftOut: leftOut, reachedFrame: reachedFrame, played: played, settled: settled, crashed: crashed,
         )
     }
 
@@ -154,6 +154,18 @@ struct GameCompatTests {
         #expect(nine.reason
             == "Sevoflurane players: it starts, but only 1 of 4 runs on 1 Mac was played past five minutes and ended by the player.")
         #expect(!nine.reason.contains("glitches"))
+        // The database counts settled runs: 7 runs, 3 closed early, 3 of the other 4 failed.
+        let settled = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("runs", runs: 7, installs: 1, reachedFrame: 1, played: 0.25, crashed: 0, settled: 4),
+        )
+        #expect(settled.reason
+            == "Sevoflurane players: it starts, but 3 of 4 runs on 1 Mac failed, not counting ones closed early.")
+        let several = GameCompatVerdict.mac(
+            antiCheat: nil, wiki: nil, proton: nil,
+            community: community("runs", runs: 20, installs: 3, reachedFrame: 1, played: 0.3, crashed: 0, settled: 9),
+        )
+        #expect(several.reason.contains("more than half the runs on a typical Mac failed, not counting ones closed early"))
         let crashes = GameCompatVerdict.mac(
             antiCheat: nil, wiki: nil, proton: nil,
             community: community("runs", runs: 4, installs: 1, reachedFrame: 1, played: 0.75, crashed: 0.25),
